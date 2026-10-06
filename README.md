@@ -1,28 +1,69 @@
-# Ap Desktop — Interview Preparation & Coding Practice Platform
+<div align="center">
 
-<p align="center">
-  <img src="public/assets/icon-192.png" width="96" height="96" alt="Ap Desktop Logo" />
-  <br />
-  <strong>A premium, offline-first Windows desktop platform for mastering Data Structures, Algorithms, SQL, and PostgreSQL.</strong>
-  <br />
-  <sub>Version 1.0.0 | Windows x64 | Built with React, TypeScript, Monaco Editor, sql.js & Electron</sub>
-</p>
+<img width="100%" alt="Ap Desktop Hero Banner" src="https://github.com/user-attachments/assets/060bde0b-adb2-4b75-825e-acb2f7915fc1" />
 
----
+# Ap Desktop
 
-## 🌟 Product Highlights
+### Interview Preparation & Coding Practice Platform
 
-- **🔒 Anti-Cheat Practice Mode**: Intercepts clipboard operations (`Ctrl+V`, `Cmd+V`, context menu paste) within the Monaco Editor to enforce pure muscle memory and authentic syntax learning.
-- **🐘 PostgreSQL 16 Genuine Lab**: Complete pgAdmin-style database explorer tree with live inline table cell editing, dataset importing (`.csv`, `.xlsx`, `.json`, `.sql`), and 1-click `CSV`/`XLSX` export.
-- **⚡ SQLite In-Memory SQL Studio**: Instant browser/WASM SQL execution against realistic production schemas with query plan insights and real-time syntax checking.
-- **🎵 Tamil Study Music Suite**: Built-in, 100% offline background focus music with licensed Tamil instrumental veena, flute, soft piano, ambient, and lo-fi tracks.
-- **📅 Rolling 52-Week Activity Heatmap**: Continuous activity calendar tracking daily submissions and study streaks dynamically ending in the active month.
-- **🤖 Automation Scheduler & Webhooks**: Multi-channel event dispatchers supporting Telegram Bot, Twilio SMS/WhatsApp, Google Sheets, and Windows Toast Notifications with offline resilience.
-- **🛡️ Authenticode Signed & Unblocked**: Pre-signed with SHA-256 Authenticode digital certificate and RFC 3161 timestamping for smooth Windows installation.
+A premium, offline-first Windows desktop app for mastering **Data Structures, Algorithms, SQL, and PostgreSQL**.
+
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
+![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen)
+![Built with](https://img.shields.io/badge/built%20with-React%20%7C%20TypeScript%20%7C%20Electron-61dafb)
+
+</div>
 
 ---
 
-## 📐 Architecture Overview
+## Screenshots
+
+| Login | Overview |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/f73c73d6-3921-47a7-95c5-2e7d538bffef" alt="Login" /> | <img src="https://github.com/user-attachments/assets/b1be3733-9dbe-4f11-a441-db8dd468dab1" alt="Overview" /> |
+
+| Problems | Python Practice |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/b28520aa-7e01-442b-b299-84a699eef9c4" alt="Problems" /> | <img src="https://github.com/user-attachments/assets/eb0fd01f-0bfb-4605-b8fe-bf583058ae0c" alt="Python" /> |
+
+| SQL Studio | PostgreSQL Lab |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/4e285a2b-537d-4f7b-9797-d7f37df0920d" alt="SQL Studio" /> | <img src="https://github.com/user-attachments/assets/50ee8583-10a3-44fa-9660-1042d082c142" alt="SQL Lab" /> |
+
+| To-Do |
+| :---: |
+| <img src="https://github.com/user-attachments/assets/6fd8463a-c18b-4671-9ab4-7456bf221af7" alt="To-do" /> |
+
+---
+
+## Features
+
+| Feature | Description |
+| :--- | :--- |
+| 🔒 **Anti-Cheat Practice Mode** | Blocks clipboard operations in the Monaco Editor (`Ctrl+V`, `Cmd+V`, context-menu paste) so you build real muscle memory and syntax recall. |
+| 🐘 **PostgreSQL 16 Lab** | pgAdmin-style explorer tree, live inline cell editing, dataset import (`.csv`, `.xlsx`, `.json`, `.sql`) and one-click `CSV` / `XLSX` export. |
+| ⚡ **SQL Studio (SQLite WASM)** | Instant in-memory SQL execution on realistic production schemas, with query plan insights and real-time syntax checking. |
+| 🎵 **Tamil Study Music** | Fully offline focus music: veena, flute, soft piano, ambient and lo-fi instrumental tracks. |
+| 📅 **52-Week Activity Heatmap** | Rolling calendar of daily submissions and study streaks. |
+| 🤖 **Automation & Webhooks** | Event dispatch to Telegram Bot, Twilio SMS/WhatsApp, Google Sheets and Windows Toast notifications, with offline resilience. |
+| 🛡️ **Signed Installer** | SHA-256 Authenticode signature with RFC 3161 timestamping for a smooth Windows install. |
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, TypeScript, Tailwind CSS, Monaco Editor, Recharts |
+| **Offline services** | sql.js (SQLite WASM), LocalStorage, IndexedDB, offline audio player, webhook dispatcher |
+| **Desktop bridge** | Electron (main process + IPC), Python 3 judge, PostgreSQL 16 bridge |
+| **Quality** | Vitest-style test suite (54 tests), TypeScript type checking |
+| **Packaging** | Inno Setup 6, Electron NSIS, PowerShell build and signing scripts |
+
+---
+
+## Architecture
 
 ```mermaid
 graph TD
@@ -60,103 +101,110 @@ graph TD
 
 ---
 
-## 🚀 Quick Start & Development
+## Getting Started
 
 ### Prerequisites
-- **Node.js**: v18.x or v20.x
-- **Python**: v3.10+ (for Python judge execution and PostgreSQL worker)
-- **PostgreSQL 16**: (Optional, for genuine PostgreSQL lab features)
 
-### Installation & Launch
+- **Node.js** v18.x or v20.x
+- **Python** 3.10+ (Python judge and PostgreSQL worker)
+- **PostgreSQL 16** (optional, only for the genuine PostgreSQL lab)
+
+### Install and Run
 
 ```powershell
-# 1. Clone repository and install dependencies
+# 1. Clone and install
 git clone https://github.com/arun-pandian-p/Self_learn-desktop-application.git
-cd ap
+cd Self_learn-desktop-application
 npm install
 
-# 2. Run TypeScript check & test suite
+# 2. Type check and run tests
 npm run typecheck
 npm test
 
-# 3. Launch in Desktop Development Mode
+# 3a. Desktop development mode
 npm run electron:dev
 
-# Or launch Web Preview mode
+# 3b. Or web preview mode
 npm run dev
 ```
 
 ---
 
-## 📦 Production Build & Release Pipeline
-
-The application follows the standardized build, packaging, and signing procedures defined in [`SKILL.md`](file:///c:/Users/Rishi/OneDrive/Desktop/ap/SKILL.md):
+## Production Build & Release
 
 ```powershell
-# Step 1: Quality Gate & Test Suite (54 Tests)
+# 1. Quality gate (type check + 54 tests)
 npm run typecheck
 npm test
 
-# Step 2: Compile Production Frontend Bundle
+# 2. Build the production frontend bundle
 npm run build
 
-# Step 3: Compile Inno Setup 6 Native Installer
+# 3. Build the Inno Setup 6 installer
 powershell -ExecutionPolicy Bypass -File .\scripts\build-installer.ps1 -SkipFrontendBuild
 
-# Step 4: SHA-256 Authenticode Signing & SmartScreen Unblocking
+# 4. Sign (SHA-256 Authenticode) and unblock for SmartScreen
 powershell -ExecutionPolicy Bypass -File .\scripts\sign-and-unblock.ps1
 ```
 
-### Release Distribution Targets
+### Release Targets
 
-| Target Executable | Output Path | Description |
+| Target | Output Path | Description |
 | :--- | :--- | :--- |
-| **Inno Setup 6 Native Installer** | `release\installer\Ap_Setup_v1.0.0_x64.exe` | Recommended ultra-compressed standalone Windows setup wizard |
-| **Electron NSIS Installer** | `release\Ap-Setup-1.0.0-x64.exe` | Standard Electron NSIS auto-updating installer |
-| **Portable Binary Package** | `release\win-unpacked\Ap.exe` | Zero-install standalone desktop executable |
+| **Inno Setup 6 Installer** *(recommended)* | `release\installer\Ap_Setup_v1.0.0_x64.exe` | Compact standalone Windows setup wizard |
+| **Electron NSIS Installer** | `release\Ap-Setup-1.0.0-x64.exe` | Standard Electron installer with auto-update support |
+| **Portable Build** | `release\win-unpacked\Ap.exe` | Zero-install standalone executable |
 
 ---
 
-## 🧪 Test Verification Suite
+## Testing
 
-The repository includes a comprehensive 54-test verification suite covering all core subsystems:
+The repo ships with a 54-test suite across all core subsystems:
 
-```
-✓ tests/license.test.ts (4 tests)
-✓ tests/study-music.test.ts (7 tests)
-✓ tests/notifications.test.ts (4 tests)
-✓ tests/sql-runner.test.ts (4 tests)
-✓ tests/sandbox.test.ts (4 tests)
-✓ tests/electron-ipc.test.ts (5 tests)
-✓ tests/phase-enhancements.test.ts (4 tests)
-✓ tests/curriculum-import.test.ts (7 tests)
-✓ tests/profile-submissions.test.ts (10 tests)
-✓ tests/postgres.test.ts (5 tests)
+```text
+✓ tests/license.test.ts              (4 tests)
+✓ tests/study-music.test.ts          (7 tests)
+✓ tests/notifications.test.ts        (4 tests)
+✓ tests/sql-runner.test.ts           (4 tests)
+✓ tests/sandbox.test.ts              (4 tests)
+✓ tests/electron-ipc.test.ts         (5 tests)
+✓ tests/phase-enhancements.test.ts   (4 tests)
+✓ tests/curriculum-import.test.ts    (7 tests)
+✓ tests/profile-submissions.test.ts  (10 tests)
+✓ tests/postgres.test.ts             (5 tests)
 
 Test Files  10 passed (10)
      Tests  54 passed (54)
 ```
 
-Run test suite:
 ```powershell
-npm run test
+npm test
 ```
 
 ---
 
-## ⌨️ Keyboard Shortcuts & Practice Mode Rules
+## Keyboard Shortcuts & Practice Rules
 
 | Shortcut / Action | Scope | Behavior |
 | :--- | :--- | :--- |
-| `Ctrl + Enter` / `Cmd + Enter` | Monaco Editor | Execute Code / Submit Solution |
-| `Ctrl + S` / `Cmd + S` | Practice Mode | Save Code Draft locally |
-| `Ctrl + V` / `Ctrl + C` | Practice Monaco Editor | **Blocked** (Enforces manual typing) |
-| `Double Click Cell` | PostgreSQL Table View | Inline edit cell value & dispatch `UPDATE` |
-| `Space` | Study Music Player | Play / Pause active ambient track |
+| `Ctrl + Enter` / `Cmd + Enter` | Monaco Editor | Run code / submit solution |
+| `Ctrl + S` / `Cmd + S` | Practice Mode | Save code draft locally |
+| `Ctrl + V` / `Ctrl + C` | Practice Mode editor | **Blocked** to enforce manual typing |
+| `Double-click cell` | PostgreSQL table view | Edit inline and dispatch `UPDATE` |
+| `Space` | Study Music Player | Play / pause current track |
 
 ---
 
-## 📄 License & Attribution
+## Roadmap
 
-Designed and developed by **Ap Software Technologies** (Arun Pandian).  
-All bundled focus music assets and curriculum datasets are licensed for offline redistribution.
+- [ ] v1.1: bug fixes and stability improvements
+- [ ] Refactors for cleaner OOP structure and LLD
+- [ ] More problems and curriculum content
+
+---
+
+## License & Credits
+
+Designed and developed by **Ap Software Technologies** ([Arun Pandian](https://github.com/arun-pandian-p)).
+
+All bundled focus music and curriculum datasets are licensed for offline redistribution.
