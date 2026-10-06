@@ -25,6 +25,7 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\release\installer
 OutputBaseFilename=Ap_Setup_v{#MyAppVersion}_x64
+SetupIconFile=..\src-tauri\icons\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
