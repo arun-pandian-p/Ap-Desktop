@@ -42,23 +42,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenCreateTask,
 }) => {
   const [statsData, setStatsData] = useState({
-    solvedQuestions: 90,
-    accuracy: 73,
-    activeStudyHours: '4.2',
-    currentStreak: 3,
-    totalSubmissions: 124,
-    completedTasks: 3,
-    totalTasks: 5,
+    solvedQuestions: 0,
+    accuracy: 0,
+    activeStudyHours: '0.0',
+    currentStreak: 0,
+    totalSubmissions: 0,
+    completedTasks: 0,
+    totalTasks: 0,
   });
 
   const [weeklyData, setWeeklyData] = useState([
-    { day: 'Mon', questions: 12, hours: 3.5 },
-    { day: 'Tue', questions: 18, hours: 4.2 },
-    { day: 'Wed', questions: 15, hours: 3.8 },
-    { day: 'Thu', questions: 22, hours: 5.1 },
-    { day: 'Fri', questions: 25, hours: 5.8 },
-    { day: 'Sat', questions: 30, hours: 6.5 },
-    { day: 'Sun', questions: 20, hours: 4.2 },
+    { day: 'Mon', questions: 0, hours: 0 },
+    { day: 'Tue', questions: 0, hours: 0 },
+    { day: 'Wed', questions: 0, hours: 0 },
+    { day: 'Thu', questions: 0, hours: 0 },
+    { day: 'Fri', questions: 0, hours: 0 },
+    { day: 'Sat', questions: 0, hours: 0 },
+    { day: 'Sun', questions: 0, hours: 0 },
   ]);
 
   const loadData = async () => {
@@ -71,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       const acc = pStats.totalSubmissions > 0
         ? Math.round((pStats.totalSolved / pStats.totalSubmissions) * 100)
-        : 73;
+        : 0;
 
       setStatsData({
         solvedQuestions: pStats.totalSolved,
@@ -95,12 +95,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         last7.push({
           day: dayNames[d.getDay()],
           questions: daySubCount,
-          hours: Math.round((daySubCount * 0.4 + 1.2) * 10) / 10,
+          hours: daySubCount > 0 ? Math.round((daySubCount * 0.4 + 1.2) * 10) / 10 : 0,
         });
       }
-      if (last7.some(x => x.questions > 0)) {
-        setWeeklyData(last7);
-      }
+      setWeeklyData(last7);
     } catch (e) {
       console.warn('DashboardView loadData error:', e);
     }

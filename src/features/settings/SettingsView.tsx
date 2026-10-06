@@ -55,6 +55,7 @@ import {
   resetSqlExercisesToDefault,
   resetPostgresExercisesToDefault,
   resetAllUploadedDatasets,
+  clearAllSubmissionsAndHistory,
   resetSubmissionsToBaseline,
   testAndConnectRealtimeDb
 } from '@/services/db';
@@ -353,6 +354,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  // Clear & Reset All Submissions & History to 0
+  const handleClearAllSubmissions = async () => {
+    setIsResetting(true);
+    try {
+      await clearAllSubmissionsAndHistory();
+      setShowSaveSuccessPopup(true);
+      setTimeout(() => setShowSaveSuccessPopup(false), 2200);
+      onShowToast('All submissions, active history, streaks, and heatmap reset to 0!', 'success');
+    } catch (err: any) {
+      onShowToast(`Reset submissions failed: ${err.message}`, 'error');
+    } finally {
+      setIsResetting(false);
+      setConfirmResetModal(null);
+    }
+  };
+
   // Reset Submissions & Streaks to Baseline
   const handleResetSubmissions = async () => {
     setIsResetting(true);
@@ -360,7 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       await resetSubmissionsToBaseline();
       setShowSaveSuccessPopup(true);
       setTimeout(() => setShowSaveSuccessPopup(false), 2200);
-      onShowToast('Submissions and streaks reset to verified baseline (90 Solved, 124 Submissions)!', 'success');
+      onShowToast('Submissions and streaks restored to demo baseline (90 Solved, 124 Submissions)!', 'success');
     } catch (err: any) {
       onShowToast(`Reset submissions failed: ${err.message}`, 'error');
     } finally {
@@ -1135,22 +1152,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600">
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600 border-t border-gray-200/60 mt-2">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Need to reset submission attempts back to verified baseline?</span>
+                    <RotateCcw className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>Clear all submissions, active history, streaks, and heatmap to 0 (clean slate)</span>
                   </div>
-                  <button
-                    onClick={() => setConfirmResetModal({
-                      open: true,
-                      title: 'Reset Submissions to Default Baseline?',
-                      description: 'Restore the verified baseline: 90 Solved, 124 Submissions, and 3-Day streak.',
-                      action: handleResetSubmissions,
-                    })}
-                    className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Reset Baseline Submissions (90 AC / 124 Subs)
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setConfirmResetModal({
+                        open: true,
+                        title: 'Reset All Submissions & History to 0?',
+                        description: 'This will completely wipe all attempts, clear submission history, reset streaks/heatmap to 0, and revert all problem statuses back to "todo".',
+                        action: handleClearAllSubmissions,
+                      })}
+                      disabled={isResetting}
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Reset All Submissions & History (0 Subs)</span>
+                    </button>
+                    <button
+                      onClick={() => setConfirmResetModal({
+                        open: true,
+                        title: 'Load Demo Baseline Submissions?',
+                        description: 'Restore the demo baseline data: 90 Solved, 124 Submissions, and 3-Day streak.',
+                        action: handleResetSubmissions,
+                      })}
+                      disabled={isResetting}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Load Demo (90 AC)
+                    </button>
+                  </div>
                 </div>
               </div>
 

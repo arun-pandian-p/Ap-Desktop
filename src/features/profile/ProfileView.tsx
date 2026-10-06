@@ -64,19 +64,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   // SQLite-driven statistics & heatmap
   const [dbStats, setDbStats] = useState<ProfileStatsResult>({
-    totalSolved: 90,
+    totalSolved: 0,
     totalQuestions: 4073,
-    easySolved: 64,
+    easySolved: 0,
     easyTotal: 969,
-    mediumSolved: 23,
+    mediumSolved: 0,
     mediumTotal: 2124,
-    hardSolved: 3,
+    hardSolved: 0,
     hardTotal: 980,
-    attemptingCount: 3,
-    totalSubmissions: 124,
-    totalActiveDays: 20,
-    currentStreak: 3,
-    longestStreak: 3,
+    attemptingCount: 0,
+    totalSubmissions: 0,
+    totalActiveDays: 0,
+    currentStreak: 0,
+    longestStreak: 0,
   });
 
   const [selectedYear, setSelectedYear] = useState<number | 'current'>('current');

@@ -14,6 +14,8 @@ import {
   resetSqlExercisesToDefault,
   resetPostgresExercisesToDefault,
   resetAllUploadedDatasets,
+  clearAllSubmissionsAndHistory,
+  fetchStats,
   testAndConnectRealtimeDb
 } from '../src/services/db';
 
@@ -292,5 +294,33 @@ describe('Profile, Real-time Submissions & Streaks Engine', () => {
     expect(res.tablesCount).toBeGreaterThanOrEqual(6);
     expect(res.questionsCount).toBeGreaterThanOrEqual(1337);
     expect(res.message).toContain('Connected to SQLite Wasm Realtime Database');
+  });
+
+  it('10. should clear all submissions, active history, streaks, and sessions to 0', async () => {
+    const clearRes = await clearAllSubmissionsAndHistory();
+    expect(clearRes.cleared).toBe(true);
+    expect(clearRes.attemptsCount).toBe(0);
+
+    const profileStats = await fetchProfileStats();
+    expect(profileStats.totalSolved).toBe(0);
+    expect(profileStats.totalSubmissions).toBe(0);
+    expect(profileStats.totalActiveDays).toBe(0);
+    expect(profileStats.currentStreak).toBe(0);
+    expect(profileStats.longestStreak).toBe(0);
+
+    const overallStats = await fetchStats();
+    expect(overallStats.solvedQuestions).toBe(0);
+    expect(overallStats.accuracy).toBe(0);
+    expect(overallStats.streakDays).toBe(0);
+
+    const heatmap = await fetchSubmissionHeatmap('current');
+    expect(heatmap.totalSubmissions).toBe(0);
+    expect(heatmap.totalActiveDays).toBe(0);
+
+    const subs = await fetchSubmissions();
+    expect(subs.length).toBe(0);
+
+    const solvedIds = await fetchSolvedProblemIds();
+    expect(solvedIds.size).toBe(0);
   });
 });

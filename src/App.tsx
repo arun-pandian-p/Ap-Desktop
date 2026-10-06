@@ -40,7 +40,7 @@ export const App: React.FC = () => {
 
   const [license, setLicense] = useState<LicenseState>(getCurrentLicense());
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [stats, setStats] = useState<any>({ streakDays: 14, activeStudyHours: '4.2' });
+  const [stats, setStats] = useState<any>({ streakDays: 0, activeStudyHours: '0.0' });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Dialog states
@@ -92,7 +92,15 @@ export const App: React.FC = () => {
     });
 
     window.addEventListener('ap_submissions_updated', refreshStats);
-    return () => window.removeEventListener('ap_submissions_updated', refreshStats);
+    window.addEventListener('ap_questions_updated', refreshStats);
+    window.addEventListener('ap_profile_updated', refreshStats);
+    window.addEventListener('ap_stats_updated', refreshStats);
+    return () => {
+      window.removeEventListener('ap_submissions_updated', refreshStats);
+      window.removeEventListener('ap_questions_updated', refreshStats);
+      window.removeEventListener('ap_profile_updated', refreshStats);
+      window.removeEventListener('ap_stats_updated', refreshStats);
+    };
   }, []);
 
   // Sync theme changes with DOM and localStorage

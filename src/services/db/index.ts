@@ -326,10 +326,10 @@ async function seedAdditionalTables(db: Database): Promise<void> {
       }
     }
 
-    const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
-    const attCount = attCountRes.length > 0 ? (attCountRes[0].values[0][0] as number) : 0;
-    if (attCount === 0) {
-      await seedBaselineAttempts(db);
+    const initSettingRes = db.exec(`SELECT value FROM app_settings WHERE key = 'attempts_initialized'`);
+    const isAttemptsInit = initSettingRes.length > 0 && initSettingRes[0].values.length > 0;
+    if (!isAttemptsInit) {
+      db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'initialized');`);
     }
   } catch (err) {
     console.warn('Error in seedAdditionalTables:', err);
@@ -591,22 +591,22 @@ export async function fetchStats() {
   const attemptedQuestions = (qData[2] as number) || 0;
   const totalTasks = (tData[0] as number) || 0;
   const completedTasks = (tData[1] as number) || 0;
-  const activeSeconds = (sData[0] as number) || 3600;
+  const activeSeconds = (sData[0] as number) || 0;
 
   const profileStats = await fetchProfileStats();
   const accuracy = profileStats.totalSubmissions > 0
     ? Math.round((profileStats.totalSolved / profileStats.totalSubmissions) * 100)
-    : (attemptedQuestions > 0 ? Math.round((profileStats.totalSolved / attemptedQuestions) * 100) : 78);
+    : (attemptedQuestions > 0 ? Math.round((profileStats.totalSolved / attemptedQuestions) * 100) : 0);
 
   return {
     totalQuestions,
     solvedQuestions: profileStats.totalSolved,
     accuracy,
     activeStudyHours: (activeSeconds / 3600).toFixed(1),
-    topicsCompleted: 18,
+    topicsCompleted: profileStats.totalSolved > 0 ? 18 : 0,
     totalTopics: 52,
-    completedTasks: completedTasks > 0 ? completedTasks : 3,
-    totalTasks: totalTasks > 0 ? totalTasks : 5,
+    completedTasks: completedTasks > 0 ? completedTasks : 0,
+    totalTasks: totalTasks > 0 ? totalTasks : 0,
     streakDays: profileStats.currentStreak,
   };
 }
@@ -1156,9 +1156,27 @@ export async function resetAllUploadedDatasets(): Promise<{ python: number; sql:
   return { python: py.total, sql: sql.total, postgres: pg.total };
 }
 
+export async function clearAllSubmissionsAndHistory(): Promise<{ attemptsCount: number; cleared: boolean }> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM attempts;`);
+  db.run(`DELETE FROM study_sessions;`);
+  db.run(`UPDATE questions SET status = 'todo', last_attempted = NULL;`);
+  db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'cleared');`);
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_submissions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+    window.dispatchEvent(new CustomEvent('ap_stats_updated'));
+  }
+  return { attemptsCount: 0, cleared: true };
+}
+
 export async function resetSubmissionsToBaseline(): Promise<void> {
   const db = await getDatabase();
   db.run(`DELETE FROM attempts;`);
+  db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'baseline');`);
   await seedBaselineAttempts(db);
   persistDatabase();
 
@@ -1166,6 +1184,7 @@ export async function resetSubmissionsToBaseline(): Promise<void> {
     window.dispatchEvent(new CustomEvent('ap_submissions_updated'));
     window.dispatchEvent(new CustomEvent('ap_questions_updated'));
     window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+    window.dispatchEvent(new CustomEvent('ap_stats_updated'));
   }
 }
 

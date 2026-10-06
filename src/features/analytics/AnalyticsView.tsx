@@ -31,14 +31,14 @@ interface AnalyticsViewProps {
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onNavigate }) => {
   const [statsData, setStatsData] = useState({
-    solvedQuestions: 90,
+    solvedQuestions: 0,
     totalQuestions: 4073,
-    accuracy: 73,
-    activeStudyHours: '42.5',
-    currentStreak: 3,
-    longestStreak: 3,
-    totalSubmissions: 124,
-    attemptingCount: 3,
+    accuracy: 0,
+    activeStudyHours: '0.0',
+    currentStreak: 0,
+    longestStreak: 0,
+    totalSubmissions: 0,
+    attemptingCount: 0,
   });
 
   const loadData = async () => {
@@ -49,12 +49,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onNavigate }) => {
       ]);
       const acc = pStats.totalSubmissions > 0
         ? Math.round((pStats.totalSolved / pStats.totalSubmissions) * 100)
-        : 73;
+        : 0;
       setStatsData({
         solvedQuestions: pStats.totalSolved,
         totalQuestions: pStats.totalQuestions,
         accuracy: acc,
-        activeStudyHours: '42.5',
+        activeStudyHours: sStats.activeStudyHours,
         currentStreak: pStats.currentStreak,
         longestStreak: pStats.longestStreak,
         totalSubmissions: pStats.totalSubmissions,
