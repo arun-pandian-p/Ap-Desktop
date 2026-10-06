@@ -37,6 +37,9 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 *.env
+secret.json
+secrets.json
+*.secret.json
 
 # Python worker caches & virtual environments
 __pycache__/
