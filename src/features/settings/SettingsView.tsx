@@ -29,7 +29,9 @@ import {
   AtSign,
   Play,
   Camera,
-  ExternalLink
+  ExternalLink,
+  Server,
+  Code2
 } from 'lucide-react';
 import { AccentColor, ThemeMode, LicenseState, ScreenId, UserProfile } from '@/types';
 import { getIntegrityDiagnostics, getRecentSecurityEvents } from '@/services/integrity';
@@ -41,7 +43,14 @@ import {
   getCurriculumStats, 
   vacuumDatabase,
   fetchAppSettings,
-  setAppSetting
+  setAppSetting,
+  importSqlExercisesFromCsv,
+  importPostgresExercisesFromCsv,
+  exportSqlExercisesToCsv,
+  exportPostgresExercisesToCsv,
+  getSqlCurriculumStats,
+  getPostgresCurriculumStats,
+  generateSampleCsv
 } from '@/services/db';
 import { getPythonInterpreterInfo, PythonInterpreterInfo, executePythonCode } from '@/services/runner';
 import { getUserProfile, saveUserProfile } from '@/services/profile';
@@ -92,8 +101,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
 
-  // Problems Settings & Stats
+  // Problems Settings & Categorized Dataset Import
+  const [datasetCategory, setDatasetCategory] = useState<'python' | 'sql' | 'postgres'>('python');
   const [curriculumStats, setCurriculumStats] = useState({ total: 1337, easy: 450, medium: 650, hard: 237, patterns: 50 });
+  const [sqlStats, setSqlStats] = useState({ total: 10, easy: 5, medium: 3, hard: 2, categories: 4 });
+  const [postgresStats, setPostgresStats] = useState({ total: 4, easy: 1, medium: 2, hard: 1, categories: 3 });
   const [isImporting, setIsImporting] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
 
@@ -114,6 +126,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       const stats = await getCurriculumStats();
       setCurriculumStats(stats);
+
+      const sStats = await getSqlCurriculumStats();
+      setSqlStats(sStats);
+
+      const pgStats = await getPostgresCurriculumStats();
+      setPostgresStats(pgStats);
 
       const profile = getUserProfile();
       setUserProfile(profile);
@@ -171,24 +189,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }, 1200);
   };
 
-  // CSV/XLSX Upload Handler
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Category-based CSV/XLSX Upload Handler
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, cat: 'python' | 'sql' | 'postgres') => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsImporting(true);
     try {
       const text = await file.text();
-      const res = await importQuestionsFromCsv(text);
-      const updatedStats = await getCurriculumStats();
-      setCurriculumStats(updatedStats);
-      onShowToast(`Successfully imported ${res.imported} problems from ${file.name}! Total curriculum: ${res.total}`, 'success');
+      if (cat === 'python') {
+        const res = await importQuestionsFromCsv(text);
+        const updatedStats = await getCurriculumStats();
+        setCurriculumStats(updatedStats);
+        onShowToast(`Python Practice: Imported ${res.imported} problems from ${file.name}! Total: ${res.total}`, 'success');
+      } else if (cat === 'sql') {
+        const res = await importSqlExercisesFromCsv(text);
+        const updatedStats = await getSqlCurriculumStats();
+        setSqlStats(updatedStats);
+        onShowToast(`SQL Practice: Imported ${res.imported} exercises from ${file.name}! Total: ${res.total}`, 'success');
+      } else {
+        const res = await importPostgresExercisesFromCsv(text);
+        const updatedStats = await getPostgresCurriculumStats();
+        setPostgresStats(updatedStats);
+        onShowToast(`PostgreSQL Lab: Imported ${res.imported} lab exercises from ${file.name}! Total: ${res.total}`, 'success');
+      }
     } catch (err: any) {
       onShowToast(`Failed to parse file: ${err.message}`, 'error');
     } finally {
       setIsImporting(false);
       if (event.target) event.target.value = '';
     }
+  };
+
+  const handleDownloadSample = (cat: 'python' | 'sql' | 'postgres') => {
+    const csv = generateSampleCsv(cat);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ap_sample_${cat}_problems.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    onShowToast(`Sample ${cat.toUpperCase()} CSV template downloaded!`, 'success');
   };
 
   // Reload Default Curriculum
@@ -207,19 +251,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   // Export to CSV
-  const handleExportCsv = async () => {
+  const handleExportCsv = async (cat: 'python' | 'sql' | 'postgres' = datasetCategory) => {
     try {
-      const csv = await exportQuestionsToCsv();
+      let csv = '';
+      if (cat === 'python') {
+        csv = await exportQuestionsToCsv();
+      } else if (cat === 'sql') {
+        csv = await exportSqlExercisesToCsv();
+      } else {
+        csv = await exportPostgresExercisesToCsv();
+      }
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ap_curriculum_problems_${Date.now()}.csv`;
+      a.download = `ap_${cat}_problems_${Date.now()}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      onShowToast('Problems exported to CSV successfully!', 'success');
+      onShowToast(`${cat.toUpperCase()} problems exported to CSV successfully!`, 'success');
     } catch (err: any) {
       onShowToast(`Export failed: ${err.message}`, 'error');
     }
@@ -568,78 +619,199 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </form>
           )}
 
-          {/* Section 3: Problems Settings (CSV/XLSX Import & Feed) */}
+          {/* Section 3: Problems Settings (Categorized CSV/XLSX Import & Feed) */}
           {activeSection === 'problems_settings' && (
             <div className="space-y-6">
-              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+              <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                     <FileSpreadsheet className="w-5 h-5 text-[#E11D26]" />
                     <span>Curriculum & Problem Dataset Management</span>
                   </h3>
-                  <p className="text-xs text-gray-500">Import custom problems via CSV/XLSX, synchronize dataset, or export curriculum</p>
+                  <p className="text-xs text-gray-500">Import custom problems via CSV/XLSX, synchronize dataset, or export curriculum by category</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {datasetCategory === 'python' && (
+                    <button
+                      onClick={handleReloadDataset}
+                      disabled={isReloading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Reload original 1,337 problems from seed dataset"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isReloading ? 'animate-spin text-[#E11D26]' : ''}`} />
+                      <span>Sync Seed</span>
+                    </button>
+                  )}
+
                   <button
-                    onClick={handleReloadDataset}
-                    disabled={isReloading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
-                    title="Reload original 1,337 problems from seed dataset"
+                    onClick={() => handleDownloadSample(datasetCategory)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    title={`Download sample ${datasetCategory.toUpperCase()} CSV template`}
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isReloading ? 'animate-spin text-[#E11D26]' : ''}`} />
-                    <span>Sync from Dataset</span>
+                    <Download className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Sample CSV</span>
                   </button>
 
                   <button
-                    onClick={handleExportCsv}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                    onClick={() => handleExportCsv(datasetCategory)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
                   >
-                    <Download className="w-3.5 h-3.5 text-gray-500" />
+                    <Download className="w-3.5 h-3.5 text-[#E11D26]" />
                     <span>Export CSV</span>
                   </button>
                 </div>
               </div>
 
-              {/* KPI Badges for Problems */}
-              <div className="grid grid-cols-4 gap-3">
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                  <div className="text-xl font-black text-gray-900">{curriculumStats.total}</div>
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase">Total Problems</div>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
-                  <div className="text-xl font-black text-emerald-600">{curriculumStats.easy}</div>
-                  <div className="text-[10px] text-emerald-700 font-semibold uppercase">Easy Problems</div>
-                </div>
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
-                  <div className="text-xl font-black text-amber-600">{curriculumStats.medium}</div>
-                  <div className="text-[10px] text-amber-700 font-semibold uppercase">Medium Problems</div>
-                </div>
-                <div className="p-3 bg-red-50 rounded-xl border border-red-100 text-center">
-                  <div className="text-xl font-black text-red-600">{curriculumStats.hard}</div>
-                  <div className="text-[10px] text-red-700 font-semibold uppercase">Hard Problems</div>
-                </div>
+              {/* Category Selector Tabs */}
+              <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-xl border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setDatasetCategory('python')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    datasetCategory === 'python'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                  }`}
+                >
+                  <Terminal className={`w-4 h-4 ${datasetCategory === 'python' ? 'text-[#E11D26]' : 'text-gray-400'}`} />
+                  <span>Python Practice</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-100 text-[#C8101A] font-mono">
+                    {curriculumStats.total}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDatasetCategory('sql')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    datasetCategory === 'sql'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                  }`}
+                >
+                  <Database className={`w-4 h-4 ${datasetCategory === 'sql' ? 'text-blue-500' : 'text-gray-400'}`} />
+                  <span>SQL Practice</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 font-mono">
+                    {sqlStats.total}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDatasetCategory('postgres')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    datasetCategory === 'postgres'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                  }`}
+                >
+                  <Server className={`w-4 h-4 ${datasetCategory === 'postgres' ? 'text-emerald-500' : 'text-gray-400'}`} />
+                  <span>PostgreSQL Lab</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-mono">
+                    {postgresStats.total}
+                  </span>
+                </button>
               </div>
 
-              {/* File Import Box */}
+              {/* Category-Specific KPI Stats Badges */}
+              {datasetCategory === 'python' && (
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
+                    <div className="text-xl font-black text-gray-900">{curriculumStats.total}</div>
+                    <div className="text-[10px] text-gray-500 font-semibold uppercase">Total Python</div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                    <div className="text-xl font-black text-emerald-600">{curriculumStats.easy}</div>
+                    <div className="text-[10px] text-emerald-700 font-semibold uppercase">Easy Problems</div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
+                    <div className="text-xl font-black text-amber-600">{curriculumStats.medium}</div>
+                    <div className="text-[10px] text-amber-700 font-semibold uppercase">Medium Problems</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-xl border border-red-100 text-center">
+                    <div className="text-xl font-black text-red-600">{curriculumStats.hard}</div>
+                    <div className="text-[10px] text-red-700 font-semibold uppercase">Hard Problems</div>
+                  </div>
+                </div>
+              )}
+
+              {datasetCategory === 'sql' && (
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
+                    <div className="text-xl font-black text-gray-900">{sqlStats.total}</div>
+                    <div className="text-[10px] text-gray-500 font-semibold uppercase">Total SQL</div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                    <div className="text-xl font-black text-emerald-600">{sqlStats.easy}</div>
+                    <div className="text-[10px] text-emerald-700 font-semibold uppercase">Easy SQL</div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
+                    <div className="text-xl font-black text-amber-600">{sqlStats.medium}</div>
+                    <div className="text-[10px] text-amber-700 font-semibold uppercase">Medium SQL</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-xl border border-red-100 text-center">
+                    <div className="text-xl font-black text-red-600">{sqlStats.hard}</div>
+                    <div className="text-[10px] text-red-700 font-semibold uppercase">Hard SQL</div>
+                  </div>
+                </div>
+              )}
+
+              {datasetCategory === 'postgres' && (
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
+                    <div className="text-xl font-black text-gray-900">{postgresStats.total}</div>
+                    <div className="text-[10px] text-gray-500 font-semibold uppercase">Total PG Labs</div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                    <div className="text-xl font-black text-emerald-600">{postgresStats.easy}</div>
+                    <div className="text-[10px] text-emerald-700 font-semibold uppercase">Easy Labs</div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
+                    <div className="text-xl font-black text-amber-600">{postgresStats.medium}</div>
+                    <div className="text-[10px] text-amber-700 font-semibold uppercase">Medium Labs</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-xl border border-red-100 text-center">
+                    <div className="text-xl font-black text-red-600">{postgresStats.hard}</div>
+                    <div className="text-[10px] text-red-700 font-semibold uppercase">Hard Labs</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dedicated Category File Import Box */}
               <div className="p-6 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50/50 hover:bg-red-50/20 hover:border-red-300 transition-all text-center space-y-3">
                 <div className="w-12 h-12 rounded-full bg-red-50 text-[#E11D26] flex items-center justify-center mx-auto">
                   <Upload className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-gray-900">Upload CSV or XLSX Problem File</h4>
+                  <h4 className="text-sm font-bold text-gray-900">
+                    Upload {datasetCategory === 'python' ? 'Python Practice' : datasetCategory === 'sql' ? 'SQL Practice' : 'PostgreSQL Lab'} CSV File
+                  </h4>
                   <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-                    Select a CSV/XLSX file matching GrindGram format (columns: order, title, platform, difficulty, pattern, practice_link).
+                    {datasetCategory === 'python'
+                      ? 'Select a CSV file matching DSA format (columns: order_num, title, pattern_name, subtopic_name, platform, difficulty, practice_link).'
+                      : datasetCategory === 'sql'
+                      ? 'Select a CSV file with SQL exercises (columns: id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url).'
+                      : 'Select a CSV file with PostgreSQL lab scripts (columns: id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes).'}
                   </p>
                 </div>
 
                 <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadSample(datasetCategory)}
+                    className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-gray-500" />
+                    <span>Download {datasetCategory.toUpperCase()} Sample</span>
+                  </button>
+
                   <label className="cursor-pointer px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2">
                     <FileSpreadsheet className="w-4 h-4" />
-                    <span>{isImporting ? 'Parsing & Ingesting...' : 'Select File to Import'}</span>
+                    <span>{isImporting ? 'Ingesting Dataset...' : `Import ${datasetCategory.toUpperCase()} CSV`}</span>
                     <input
                       type="file"
                       accept=".csv,.xlsx,.txt"
-                      onChange={handleFileUpload}
+                      onChange={(e) => handleFileUpload(e, datasetCategory)}
                       disabled={isImporting}
                       className="hidden"
                     />
@@ -647,14 +819,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
 
-              {/* Supported Columns Guide */}
+              {/* Category-Specific Supported Columns Guide */}
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-2">
-                <div className="font-bold text-gray-800">Supported Schema Columns:</div>
-                <div className="font-mono text-[11px] text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200">
-                  order_num, title, pattern_name, subtopic_name, platform, difficulty, practice_link, video_link, hint_link
+                <div className="font-bold text-gray-800">
+                  Supported Schema Columns for {datasetCategory === 'python' ? 'Python Practice' : datasetCategory === 'sql' ? 'SQL Practice' : 'PostgreSQL Lab'}:
+                </div>
+                <div className="font-mono text-[11px] text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200 overflow-x-auto whitespace-pre-wrap">
+                  {datasetCategory === 'python' && 'order_num, title, pattern_name, subtopic_name, platform, difficulty, practice_link, video_link, hint_link'}
+                  {datasetCategory === 'sql' && 'id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url'}
+                  {datasetCategory === 'postgres' && 'id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes'}
                 </div>
                 <p className="text-[11px] text-gray-500">
-                  Importing new records immediately updates the SQLite database and makes problems accessible in Python Practice and the Problems table in real time.
+                  {datasetCategory === 'python' && 'Importing updates SQLite questions table and immediately reflects in Python Practice and Problems list.'}
+                  {datasetCategory === 'sql' && 'Importing updates SQLite sql_exercises table and immediately feeds into SQL Practice workspace in real time.'}
+                  {datasetCategory === 'postgres' && 'Importing updates SQLite postgres_exercises table and immediately feeds into PostgreSQL Lab workspace in real time.'}
                 </p>
               </div>
             </div>

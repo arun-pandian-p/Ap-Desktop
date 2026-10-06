@@ -52,10 +52,16 @@ export const PostgresLabView: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('disconnected');
   const [activeServerInfo, setActiveServerInfo] = useState<PostgresTestResult | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  interface PostgresTab {
+    id: string;
+    title: string;
+    query: string;
+    result: PostgresQueryResult | null;
+  }
+
   const [tables, setTables] = useState<PostgresTableInfo[]>([]);
   const [selectedTable, setSelectedTable] = useState<string>('employees');
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [activeQueryTab, setActiveQueryTab] = useState<'query1' | 'query2'>('query1');
   const [activeResultTab, setActiveResultTab] = useState<'results' | 'output' | 'messages' | 'history'>('results');
   const [activeInspectorTab, setActiveInspectorTab] = useState<'columns' | 'constraints' | 'indexes' | 'preview'>('columns');
   const [searchTreeFilter, setSearchTreeFilter] = useState('');
@@ -77,6 +83,11 @@ SELECT version(), current_database(), current_user;
 -- Inspect existing tables:
 SELECT * FROM employees;
 `;
+  const [queryTabs, setQueryTabs] = useState<PostgresTab[]>([
+    { id: 'query-1', title: 'Query 1', query: defaultQuery, result: null },
+    { id: 'query-2', title: 'Query 2', query: '', result: null },
+  ]);
+  const [activeQueryTabId, setActiveQueryTabId] = useState<string>('query-1');
   const [query, setQuery] = useState(defaultQuery);
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<PostgresQueryResult | null>(null);
@@ -138,6 +149,65 @@ SELECT * FROM employees;
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [connectionFeedbackModal, isConfigModalOpen]);
 
+  const handleSelectQueryTab = (tabId: string) => {
+    if (tabId === activeQueryTabId) return;
+    const currentVal = editorRef.current?.getValue() ?? query;
+    const targetTab = queryTabs.find(t => t.id === tabId);
+    if (!targetTab) return;
+
+    setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: currentVal, result } : t));
+    setActiveQueryTabId(tabId);
+    setQuery(targetTab.query);
+    setResult(targetTab.result);
+    editorRef.current?.setValue(targetTab.query);
+  };
+
+  const handleNewQueryTab = () => {
+    const currentVal = editorRef.current?.getValue() ?? query;
+    const nextNum = queryTabs.length + 1;
+    const newTab: PostgresTab = {
+      id: `query-${Date.now()}`,
+      title: `Query ${nextNum}`,
+      query: '',
+      result: null,
+    };
+
+    setQueryTabs(prev => [...prev.map(t => t.id === activeQueryTabId ? { ...t, query: currentVal, result } : t), newTab]);
+    setActiveQueryTabId(newTab.id);
+    setQuery('');
+    setResult(null);
+    editorRef.current?.setValue('');
+  };
+
+  const handleCloseQueryTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (queryTabs.length <= 1) {
+      setQuery('');
+      setResult(null);
+      setQueryTabs([{ id: 'query-1', title: 'Query 1', query: '', result: null }]);
+      setActiveQueryTabId('query-1');
+      editorRef.current?.setValue('');
+      return;
+    }
+
+    const tabIndex = queryTabs.findIndex(t => t.id === tabId);
+    const remaining = queryTabs.filter(t => t.id !== tabId);
+
+    if (activeQueryTabId === tabId) {
+      const nextActive = remaining[Math.max(0, tabIndex - 1)];
+      setActiveQueryTabId(nextActive.id);
+      setQuery(nextActive.query);
+      setResult(nextActive.result);
+      editorRef.current?.setValue(nextActive.query);
+    }
+    setQueryTabs(remaining);
+  };
+
+  const handleQueryEditorChange = (val: string) => {
+    setQuery(val);
+    setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: val } : t));
+  };
+
   const handleExecute = async () => {
     if (connectionStatus !== 'connected') {
       setConnectionFeedbackModal({
@@ -157,6 +227,7 @@ SELECT * FROM employees;
     const durationMs = Math.round(endT - startT);
     setExecutionTimer(`00:${durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`}`);
     setResult(res);
+    setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: latestQuery, result: res } : t));
     setIsExecuting(false);
   };
 
@@ -164,6 +235,7 @@ SELECT * FROM employees;
     setSelectedTable(tblName);
     const q = `SELECT * FROM "${tblName}" LIMIT 100;`;
     setQuery(q);
+    setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: q } : t));
     editorRef.current?.setValue(q);
   };
 
@@ -352,29 +424,35 @@ SELECT * FROM employees;
         <div className="col-span-6 flex flex-col border-r border-[#1C2438] bg-[#0E1322] overflow-hidden">
           {/* Query Tabs */}
           <div className="h-9 bg-[#101524] border-b border-[#1C2438] px-3 flex items-center justify-between text-xs select-none">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 overflow-x-auto max-w-[70%]">
+              {queryTabs.map((t) => {
+                const isActive = t.id === activeQueryTabId;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => handleSelectQueryTab(t.id)}
+                    className={`px-3 py-1 rounded-t-lg font-mono text-xs font-semibold flex items-center gap-2 border-t border-x transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[#141A2E] text-white border-[#2A3554]'
+                        : 'text-gray-400 hover:text-gray-200 border-transparent hover:bg-[#141A2E]/50'
+                    }`}
+                  >
+                    <span>{t.title}</span>
+                    <span
+                      onClick={(e) => handleCloseQueryTab(t.id, e)}
+                      className="text-[10px] text-gray-500 hover:text-white hover:bg-red-500/30 rounded px-1 transition-colors ml-1"
+                      title="Close query tab"
+                    >
+                      ✕
+                    </span>
+                  </button>
+                );
+              })}
               <button
-                onClick={() => setActiveQueryTab('query1')}
-                className={`px-3 py-1 rounded-t-lg font-mono text-xs font-semibold flex items-center gap-2 border-t border-x ${
-                  activeQueryTab === 'query1'
-                    ? 'bg-[#141A2E] text-white border-[#2A3554]'
-                    : 'text-gray-400 hover:text-gray-200 border-transparent'
-                }`}
+                onClick={handleNewQueryTab}
+                className="px-2 py-1 text-gray-400 hover:text-white hover:bg-[#1E2638] rounded font-mono text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                title="Create New Empty Query Tab"
               >
-                <span>Query 1</span>
-                <span className="text-[10px] text-gray-500 hover:text-white">✕</span>
-              </button>
-              <button
-                onClick={() => setActiveQueryTab('query2')}
-                className={`px-3 py-1 rounded-t-lg font-mono text-xs font-semibold flex items-center gap-2 border-t border-x ${
-                  activeQueryTab === 'query2'
-                    ? 'bg-[#141A2E] text-white border-[#2A3554]'
-                    : 'text-gray-400 hover:text-gray-200 border-transparent'
-                }`}
-              >
-                <span>Query 2</span>
-              </button>
-              <button className="px-2 py-1 text-gray-500 hover:text-white font-mono text-xs" title="New Query Tab">
                 + New Query
               </button>
             </div>
@@ -383,7 +461,7 @@ SELECT * FROM employees;
             <div className="flex items-center gap-2 text-gray-400">
               <button
                 onClick={() => editorRef.current?.format()}
-                className="hover:text-white flex items-center gap-1 text-[11px]"
+                className="hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
                 title="Format SQL"
               >
                 <FileCode className="w-3 h-3" />
@@ -392,9 +470,11 @@ SELECT * FROM employees;
               <button
                 onClick={() => {
                   setQuery('');
+                  setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: '', result: null } : t));
                   editorRef.current?.setValue('');
+                  setResult(null);
                 }}
-                className="hover:text-white flex items-center gap-1 text-[11px]"
+                className="hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
                 title="Clear Editor"
               >
                 <Trash2 className="w-3 h-3" />
@@ -408,7 +488,7 @@ SELECT * FROM employees;
             <MonacoCodeEditor
               ref={editorRef}
               value={query}
-              onChange={setQuery}
+              onChange={handleQueryEditorChange}
               workspace="postgres"
               language="sql"
               selectedLanguageId="postgres"

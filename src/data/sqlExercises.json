@@ -1,5 +1,23 @@
 [
   {
+    "id": "sql-175",
+    "title": "175. Combine Two Tables",
+    "difficulty": "Easy",
+    "category": "JOINs",
+    "description": "Write a solution to report the first name, last name, city, and state of each person in the Person table. If the address of a personId is not present in the Address table, report null instead.\n\nReturn the result table in any order.",
+    "schema_sql": "CREATE TABLE Person (personId INT PRIMARY KEY, lastName VARCHAR(50), firstName VARCHAR(50));\nCREATE TABLE Address (addressId INT PRIMARY KEY, personId INT, city VARCHAR(50), state VARCHAR(50));",
+    "seed_sql": "INSERT INTO Person VALUES (1, 'Wang', 'Allen'), (2, 'Alice', 'Bob');\nINSERT INTO Address VALUES (1, 2, 'New York City', 'New York'), (2, 3, 'Leetcode', 'California');",
+    "initial_query": "SELECT firstName, lastName, city, state\nFROM Person\nLEFT JOIN Address ON Person.personId = Address.personId;",
+    "solution_sql": "SELECT firstName, lastName, city, state\nFROM Person\nLEFT JOIN Address ON Person.personId = Address.personId;",
+    "expected_output_json": "[{\"firstName\":\"Allen\",\"lastName\":\"Wang\",\"city\":null,\"state\":null},{\"firstName\":\"Bob\",\"lastName\":\"Alice\",\"city\":\"New York City\",\"state\":\"New York\"}]",
+    "schema_tables_ascii": "Table: Person\n\n+-------------+---------+\n| Column Name | Type    |\n+-------------+---------+\n| personId    | int     |\n| lastName    | varchar |\n| firstName   | varchar |\n+-------------+---------+\npersonId is the primary key (column with unique values) for this table.\nThis table contains information about the ID of some persons and their first and last names.\n\nTable: Address\n\n+-------------+---------+\n| Column Name | Type    |\n+-------------+---------+\n| addressId   | int     |\n| personId    | int     |\n| city        | varchar |\n| state       | varchar |\n+-------------+---------+\naddressId is the primary key (column with unique values) for this table.\nEach row of this table contains information about the city and state of one person with ID = personId.",
+    "input_ascii": "Input:\nPerson table:\n+----------+----------+-----------+\n| personId | lastName | firstName |\n+----------+----------+-----------+\n| 1        | Wang     | Allen     |\n| 2        | Alice    | Bob       |\n+----------+----------+-----------+\n\nAddress table:\n+-----------+----------+---------------+------------+\n| addressId | personId | city          | state      |\n+-----------+----------+---------------+------------+\n| 1         | 2        | New York City | New York   |\n| 2         | 3        | Leetcode      | California |\n+-----------+----------+---------------+------------+",
+    "output_ascii": "Output:\n+-----------+----------+---------------+----------+\n| firstName | lastName | city          | state    |\n+-----------+----------+---------------+----------+\n| Allen     | Wang     | Null          | Null     |\n| Bob       | Alice    | New York City | New York |\n+-----------+----------+---------------+----------+",
+    "explanation": "There is no address in the address table for the personId = 1 so we return null in their city and state.\naddressId = 1 contains information about the address of personId = 2.",
+    "pandas_schema": "data = [[1, 'Wang', 'Allen'], [2, 'Alice', 'Bob']]\nPerson = pd.DataFrame(data, columns=['personId', 'lastName', 'firstName']).astype({'personId':'Int64', 'lastName':'object', 'firstName':'object'})\ndata = [[1, 2, 'New York City', 'New York'], [2, 3, 'Leetcode', 'California']]\nAddress = pd.DataFrame(data, columns=['addressId', 'personId', 'city', 'state']).astype({'addressId':'Int64', 'personId':'Int64', 'city':'object', 'state':'object'})",
+    "image_url": ""
+  },
+  {
     "id": "sql-1",
     "title": "High Earners in Engineering",
     "difficulty": "Easy",
@@ -9,7 +27,13 @@
     "seed_sql": "INSERT INTO employees VALUES (1, 'Arun Kumar', 'Engineering', 92000, '2022-03-15'), (2, 'Priya Sharma', 'Engineering', 74000, '2023-01-10'), (3, 'Vikram Mehta', 'Marketing', 68000, '2021-06-20'), (4, 'Ananya Patel', 'Engineering', 105000, '2020-11-01'), (5, 'Rohan Das', 'Sales', 72000, '2022-08-14');",
     "initial_query": "SELECT name, salary FROM employees WHERE department = 'Engineering' AND salary > 75000 ORDER BY salary DESC;",
     "solution_sql": "SELECT name, salary FROM employees WHERE department = 'Engineering' AND salary > 75000 ORDER BY salary DESC;",
-    "expected_output_json": "[{\"name\":\"Ananya Patel\",\"salary\":105000},{\"name\":\"Arun Kumar\",\"salary\":92000}]"
+    "expected_output_json": "[{\"name\":\"Ananya Patel\",\"salary\":105000},{\"name\":\"Arun Kumar\",\"salary\":92000}]",
+    "schema_tables_ascii": "Table: employees\n\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n| department  | varchar(50)  |\n| salary      | int          |\n| hire_date   | date         |\n+-------------+--------------+",
+    "input_ascii": "Input:\nemployees table:\n+----+--------------+-------------+--------+------------+\n| id | name         | department  | salary | hire_date  |\n+----+--------------+-------------+--------+------------+\n| 1  | Arun Kumar   | Engineering | 92000  | 2022-03-15 |\n| 2  | Priya Sharma | Engineering | 74000  | 2023-01-10 |\n| 3  | Vikram Mehta | Marketing   | 68000  | 2021-06-20 |\n| 4  | Ananya Patel | Engineering | 105000 | 2020-11-01 |\n| 5  | Rohan Das    | Sales       | 72000  | 2022-08-14 |\n+----+--------------+-------------+--------+------------+",
+    "output_ascii": "Output:\n+--------------+--------+\n| name         | salary |\n+--------------+--------+\n| Ananya Patel | 105000 |\n| Arun Kumar   | 92000  |\n+--------------+--------+",
+    "explanation": "Only Arun Kumar ($92,000) and Ananya Patel ($105,000) belong to 'Engineering' and earn strictly over $75,000.",
+    "pandas_schema": "data = [[1, 'Arun Kumar', 'Engineering', 92000, '2022-03-15'], [2, 'Priya Sharma', 'Engineering', 74000, '2023-01-10']]\nemployees = pd.DataFrame(data, columns=['id', 'name', 'department', 'salary', 'hire_date'])",
+    "image_url": ""
   },
   {
     "id": "sql-2",
@@ -21,7 +45,13 @@
     "seed_sql": "INSERT INTO employees VALUES (1, 'Arun', 'Engineering', 90000), (2, 'Priya', 'Engineering', 80000), (3, 'Vikram', 'Marketing', 65000), (4, 'Ananya', 'Marketing', 75000), (5, 'Rohan', 'Sales', 70000);",
     "initial_query": "SELECT department, COUNT(*) as employee_count, ROUND(AVG(salary), 2) as avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2 ORDER BY avg_salary DESC;",
     "solution_sql": "SELECT department, COUNT(*) as employee_count, ROUND(AVG(salary), 2) as avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2 ORDER BY avg_salary DESC;",
-    "expected_output_json": "[{\"department\":\"Engineering\",\"employee_count\":2,\"avg_salary\":85000},{\"department\":\"Marketing\",\"employee_count\":2,\"avg_salary\":70000}]"
+    "expected_output_json": "[{\"department\":\"Engineering\",\"employee_count\":2,\"avg_salary\":85000},{\"department\":\"Marketing\",\"employee_count\":2,\"avg_salary\":70000}]",
+    "schema_tables_ascii": "Table: employees\n\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n| department  | varchar(50)  |\n| salary      | int          |\n+-------------+--------------+",
+    "input_ascii": "Input:\nemployees table:\n+----+--------+-------------+--------+\n| id | name   | department  | salary |\n+----+--------+-------------+--------+\n| 1  | Arun   | Engineering | 90000  |\n| 2  | Priya  | Engineering | 80000  |\n| 3  | Vikram | Marketing   | 65000  |\n| 4  | Ananya | Marketing   | 75000  |\n| 5  | Rohan  | Sales       | 70000  |\n+----+--------+-------------+--------+",
+    "output_ascii": "Output:\n+-------------+----------------+------------+\n| department  | employee_count | avg_salary |\n+-------------+----------------+------------+\n| Engineering | 2              | 85000      |\n| Marketing   | 2              | 70000      |\n+-------------+----------------+------------+",
+    "explanation": "Sales has only 1 employee so it is excluded by the HAVING COUNT(*) >= 2 condition.",
+    "pandas_schema": "data = [[1, 'Arun', 'Engineering', 90000], [2, 'Priya', 'Engineering', 80000]]\nemployees = pd.DataFrame(data, columns=['id', 'name', 'department', 'salary'])",
+    "image_url": ""
   },
   {
     "id": "sql-3",
@@ -33,7 +63,13 @@
     "seed_sql": "INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie'); INSERT INTO orders VALUES (101, 1, 250), (102, 1, 150), (103, 2, 500);",
     "initial_query": "SELECT c.name, SUM(o.amount) as total_spent FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.name ORDER BY total_spent DESC;",
     "solution_sql": "SELECT c.name, SUM(o.amount) as total_spent FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.name ORDER BY total_spent DESC;",
-    "expected_output_json": "[{\"name\":\"Bob\",\"total_spent\":500},{\"name\":\"Alice\",\"total_spent\":400}]"
+    "expected_output_json": "[{\"name\":\"Bob\",\"total_spent\":500},{\"name\":\"Alice\",\"total_spent\":400}]",
+    "schema_tables_ascii": "Table: customers\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n+-------------+--------------+\n\nTable: orders\n+-------------+----------+\n| Column Name | Type     |\n+-------------+----------+\n| id          | int (PK) |\n| customer_id | int      |\n| amount      | int      |\n+-------------+----------+",
+    "input_ascii": "Input:\ncustomers table:\n+----+---------+\n| id | name    |\n+----+---------+\n| 1  | Alice   |\n| 2  | Bob     |\n| 3  | Charlie |\n+----+---------+\norders table:\n+-----+-------------+--------+\n| id  | customer_id | amount |\n+-----+-------------+--------+\n| 101 | 1           | 250    |\n| 102 | 1           | 150    |\n| 103 | 2           | 500    |\n+-----+-------------+--------+",
+    "output_ascii": "Output:\n+-------+-------------+\n| name  | total_spent |\n+-------+-------------+\n| Bob   | 500         |\n| Alice | 400         |\n+-------+-------------+",
+    "explanation": "Bob spent 500, Alice spent 250 + 150 = 400. Charlie has placed no orders.",
+    "pandas_schema": "customers = pd.DataFrame([[1, 'Alice'], [2, 'Bob']], columns=['id', 'name'])\norders = pd.DataFrame([[101, 1, 250], [103, 2, 500]], columns=['id', 'customer_id', 'amount'])",
+    "image_url": ""
   },
   {
     "id": "sql-4",
@@ -45,7 +81,13 @@
     "seed_sql": "INSERT INTO employees VALUES (1, 'Alice', 'Sales', 70000), (2, 'Bob', 'Sales', 70000), (3, 'Charlie', 'Sales', 60000), (4, 'David', 'Tech', 95000), (5, 'Eve', 'Tech', 90000);",
     "initial_query": "SELECT name, department, salary, DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as salary_rank FROM employees ORDER BY department, salary_rank;",
     "solution_sql": "SELECT name, department, salary, DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as salary_rank FROM employees ORDER BY department, salary_rank;",
-    "expected_output_json": "[{\"name\":\"Alice\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Bob\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Charlie\",\"department\":\"Sales\",\"salary\":60000,\"salary_rank\":2},{\"name\":\"David\",\"department\":\"Tech\",\"salary\":95000,\"salary_rank\":1},{\"name\":\"Eve\",\"department\":\"Tech\",\"salary\":90000,\"salary_rank\":2}]"
+    "expected_output_json": "[{\"name\":\"Alice\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Bob\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Charlie\",\"department\":\"Sales\",\"salary\":60000,\"salary_rank\":2},{\"name\":\"David\",\"department\":\"Tech\",\"salary\":95000,\"salary_rank\":1},{\"name\":\"Eve\",\"department\":\"Tech\",\"salary\":90000,\"salary_rank\":2}]",
+    "schema_tables_ascii": "Table: employees\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n| department  | varchar(50)  |\n| salary      | int          |\n+-------------+--------------+",
+    "input_ascii": "Input:\nemployees table:\n+----+---------+------------+--------+\n| id | name    | department | salary |\n+----+---------+------------+--------+\n| 1  | Alice   | Sales      | 70000  |\n| 2  | Bob     | Sales      | 70000  |\n| 3  | Charlie | Sales      | 60000  |\n| 4  | David   | Tech       | 95000  |\n| 5  | Eve     | Tech       | 90000  |\n+----+---------+------------+--------+",
+    "output_ascii": "Output:\n+---------+------------+--------+-------------+\n| name    | department | salary | salary_rank |\n+---------+------------+--------+-------------+\n| Alice   | Sales      | 70000  | 1           |\n| Bob     | Sales      | 70000  | 1           |\n| Charlie | Sales      | 60000  | 2           |\n| David   | Tech       | 95000  | 1           |\n| Eve     | Tech       | 90000  | 2           |\n+---------+------------+--------+-------------+",
+    "explanation": "Alice and Bob both have the highest salary in Sales ($70,000) so they share rank 1. Charlie has rank 2.",
+    "pandas_schema": "employees = pd.DataFrame([[1, 'Alice', 'Sales', 70000]], columns=['id', 'name', 'department', 'salary'])",
+    "image_url": ""
   },
   {
     "id": "sql-5",
@@ -57,7 +99,13 @@
     "seed_sql": "INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie'), (4, 'David'); INSERT INTO orders VALUES (101, 1, 200), (102, 2, 450);",
     "initial_query": "SELECT c.name FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE o.id IS NULL ORDER BY c.name ASC;",
     "solution_sql": "SELECT c.name FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE o.id IS NULL ORDER BY c.name ASC;",
-    "expected_output_json": "[{\"name\":\"Charlie\"},{\"name\":\"David\"}]"
+    "expected_output_json": "[{\"name\":\"Charlie\"},{\"name\":\"David\"}]",
+    "schema_tables_ascii": "Table: customers\n+----+-------+\n| id | name  |\n+----+-------+\n\nTable: orders\n+----+-------------+--------+\n| id | customer_id | amount |\n+----+-------------+--------+",
+    "input_ascii": "Input:\ncustomers table:\n+----+---------+\n| id | name    |\n+----+---------+\n| 1  | Alice   |\n| 2  | Bob     |\n| 3  | Charlie |\n| 4  | David   |\n+----+---------+\norders table:\n+-----+-------------+--------+\n| id  | customer_id | amount |\n+-----+-------------+--------+\n| 101 | 1           | 200    |\n| 102 | 2           | 450    |\n+-----+-------------+--------+",
+    "output_ascii": "Output:\n+---------+\n| name    |\n+---------+\n| Charlie |\n| David   |\n+---------+",
+    "explanation": "Charlie (id=3) and David (id=4) do not appear in the orders table.",
+    "pandas_schema": "customers = pd.DataFrame([[1, 'Alice'], [3, 'Charlie']], columns=['id', 'name'])",
+    "image_url": ""
   },
   {
     "id": "sql-6",
@@ -69,7 +117,13 @@
     "seed_sql": "INSERT INTO products VALUES (1, 'Mechanical Keyboard', 1420), (2, '4K Monitor', 890), (3, 'Wireless Mouse', 3100), (4, 'USB-C Dock', 2150), (5, 'Webcam', 670);",
     "initial_query": "SELECT product_name, units_sold FROM products ORDER BY units_sold DESC LIMIT 3;",
     "solution_sql": "SELECT product_name, units_sold FROM products ORDER BY units_sold DESC LIMIT 3;",
-    "expected_output_json": "[{\"product_name\":\"Wireless Mouse\",\"units_sold\":3100},{\"product_name\":\"USB-C Dock\",\"units_sold\":2150},{\"product_name\":\"Mechanical Keyboard\",\"units_sold\":1420}]"
+    "expected_output_json": "[{\"product_name\":\"Wireless Mouse\",\"units_sold\":3100},{\"product_name\":\"USB-C Dock\",\"units_sold\":2150},{\"product_name\":\"Mechanical Keyboard\",\"units_sold\":1420}]",
+    "schema_tables_ascii": "Table: products\n+--------------+--------------+\n| Column Name  | Type         |\n+--------------+--------------+\n| id           | int (PK)     |\n| product_name | varchar(100) |\n| units_sold   | int          |\n+--------------+--------------+",
+    "input_ascii": "Input:\nproducts table:\n+----+---------------------+------------+\n| id | product_name        | units_sold |\n+----+---------------------+------------+\n| 1  | Mechanical Keyboard | 1420       |\n| 2  | 4K Monitor          | 890        |\n| 3  | Wireless Mouse      | 3100       |\n| 4  | USB-C Dock          | 2150       |\n| 5  | Webcam              | 670        |\n+----+---------------------+------------+",
+    "output_ascii": "Output:\n+---------------------+------------+\n| product_name        | units_sold |\n+---------------------+------------+\n| Wireless Mouse      | 3100       |\n| USB-C Dock          | 2150       |\n| Mechanical Keyboard | 1420       |\n+---------------------+------------+",
+    "explanation": "Wireless Mouse (3100), USB-C Dock (2150), and Mechanical Keyboard (1420) are the top 3 items.",
+    "pandas_schema": "products = pd.DataFrame([[1, 'Mouse', 3100]], columns=['id', 'product_name', 'units_sold'])",
+    "image_url": ""
   },
   {
     "id": "sql-7",
@@ -81,7 +135,13 @@
     "seed_sql": "INSERT INTO employees VALUES (1, 'Arun', 120000), (2, 'Priya', 110000), (3, 'Vikram', 95000), (4, 'Ananya', 120000), (5, 'Rohan', 85000);",
     "initial_query": "SELECT MAX(salary) as second_highest_salary FROM employees WHERE salary < (SELECT MAX(salary) FROM employees);",
     "solution_sql": "SELECT MAX(salary) as second_highest_salary FROM employees WHERE salary < (SELECT MAX(salary) FROM employees);",
-    "expected_output_json": "[{\"second_highest_salary\":110000}]"
+    "expected_output_json": "[{\"second_highest_salary\":110000}]",
+    "schema_tables_ascii": "Table: employees\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n| salary      | int          |\n+-------------+--------------+",
+    "input_ascii": "Input:\nemployees table:\n+----+--------+--------+\n| id | name   | salary |\n+----+--------+--------+\n| 1  | Arun   | 120000 |\n| 2  | Priya  | 110000 |\n| 3  | Vikram | 95000  |\n| 4  | Ananya | 120000 |\n| 5  | Rohan  | 85000  |\n+----+--------+--------+",
+    "output_ascii": "Output:\n+-----------------------+\n| second_highest_salary |\n+-----------------------+\n| 110000                |\n+-----------------------+",
+    "explanation": "Highest salary is 120000 (Arun and Ananya). The highest salary below 120000 is 110000 (Priya).",
+    "pandas_schema": "employees = pd.DataFrame([[1, 'Arun', 120000], [2, 'Priya', 110000]], columns=['id', 'name', 'salary'])",
+    "image_url": ""
   },
   {
     "id": "sql-8",
@@ -93,7 +153,13 @@
     "seed_sql": "INSERT INTO users VALUES (1, 'john@example.com'), (2, 'bob@example.com'), (3, 'john@example.com'), (4, 'alice@example.com'), (5, 'bob@example.com');",
     "initial_query": "SELECT email FROM users GROUP BY email HAVING COUNT(*) > 1 ORDER BY email ASC;",
     "solution_sql": "SELECT email FROM users GROUP BY email HAVING COUNT(*) > 1 ORDER BY email ASC;",
-    "expected_output_json": "[{\"email\":\"bob@example.com\"},{\"email\":\"john@example.com\"}]"
+    "expected_output_json": "[{\"email\":\"bob@example.com\"},{\"email\":\"john@example.com\"}]",
+    "schema_tables_ascii": "Table: users\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| email       | varchar(150) |\n+-------------+--------------+",
+    "input_ascii": "Input:\nusers table:\n+----+-------------------+\n| id | email             |\n+----+-------------------+\n| 1  | john@example.com  |\n| 2  | bob@example.com   |\n| 3  | john@example.com  |\n| 4  | alice@example.com |\n| 5  | bob@example.com   |\n+----+-------------------+",
+    "output_ascii": "Output:\n+------------------+\n| email            |\n+------------------+\n| bob@example.com  |\n| john@example.com |\n+------------------+",
+    "explanation": "Both bob@example.com and john@example.com appear multiple times.",
+    "pandas_schema": "users = pd.DataFrame([[1, 'john@example.com'], [2, 'bob@example.com']], columns=['id', 'email'])",
+    "image_url": ""
   },
   {
     "id": "sql-9",
@@ -105,7 +171,13 @@
     "seed_sql": "INSERT INTO projects VALUES (1, 'Engineering', 50000, 'active'), (2, 'Engineering', 75000, 'active'), (3, 'Marketing', 30000, 'completed'), (4, 'Marketing', 45000, 'active'), (5, 'Sales', 20000, 'active');",
     "initial_query": "SELECT department, COUNT(*) as project_count, SUM(budget) as total_budget FROM projects WHERE status = 'active' GROUP BY department ORDER BY total_budget DESC;",
     "solution_sql": "SELECT department, COUNT(*) as project_count, SUM(budget) as total_budget FROM projects WHERE status = 'active' GROUP BY department ORDER BY total_budget DESC;",
-    "expected_output_json": "[{\"department\":\"Engineering\",\"project_count\":2,\"total_budget\":125000},{\"department\":\"Marketing\",\"project_count\":1,\"total_budget\":45000},{\"department\":\"Sales\",\"project_count\":1,\"total_budget\":20000}]"
+    "expected_output_json": "[{\"department\":\"Engineering\",\"project_count\":2,\"total_budget\":125000},{\"department\":\"Marketing\",\"project_count\":1,\"total_budget\":45000},{\"department\":\"Sales\",\"project_count\":1,\"total_budget\":20000}]",
+    "schema_tables_ascii": "Table: projects\n+-------------+-------------+\n| Column Name | Type        |\n+-------------+-------------+\n| id          | int (PK)    |\n| department  | varchar(50) |\n| budget      | int         |\n| status      | varchar(20) |\n+-------------+-------------+",
+    "input_ascii": "Input:\nprojects table:\n+----+-------------+--------+-----------+\n| id | department  | budget | status    |\n+----+-------------+--------+-----------+\n| 1  | Engineering | 50000  | active    |\n| 2  | Engineering | 75000  | active    |\n| 3  | Marketing   | 30000  | completed |\n| 4  | Marketing   | 45000  | active    |\n| 5  | Sales       | 20000  | active    |\n+----+-------------+--------+-----------+",
+    "output_ascii": "Output:\n+-------------+---------------+--------------+\n| department  | project_count | total_budget |\n+-------------+---------------+--------------+\n| Engineering | 2             | 125000       |\n| Marketing   | 1             | 45000        |\n| Sales       | 1             | 20000        |\n+-------------+---------------+--------------+",
+    "explanation": "Engineering has 2 active projects (50000+75000=125000), Marketing has 1 active (45000), Sales has 1 active (20000).",
+    "pandas_schema": "projects = pd.DataFrame([[1, 'Engineering', 50000, 'active']], columns=['id', 'department', 'budget', 'status'])",
+    "image_url": ""
   },
   {
     "id": "sql-10",
@@ -117,6 +189,12 @@
     "seed_sql": "INSERT INTO employees VALUES (1, 'Joe', 70000, 3), (2, 'Henry', 80000, 4), (3, 'Sam', 60000, NULL), (4, 'Max', 90000, NULL);",
     "initial_query": "SELECT e.name as employee_name, m.name as manager_name FROM employees e JOIN employees m ON e.manager_id = m.id WHERE e.salary > m.salary;",
     "solution_sql": "SELECT e.name as employee_name, m.name as manager_name FROM employees e JOIN employees m ON e.manager_id = m.id WHERE e.salary > m.salary;",
-    "expected_output_json": "[{\"employee_name\":\"Joe\",\"manager_name\":\"Sam\"}]"
+    "expected_output_json": "[{\"employee_name\":\"Joe\",\"manager_name\":\"Sam\"}]",
+    "schema_tables_ascii": "Table: employees\n+-------------+--------------+\n| Column Name | Type         |\n+-------------+--------------+\n| id          | int (PK)     |\n| name        | varchar(100) |\n| salary      | int          |\n| manager_id  | int          |\n+-------------+--------------+",
+    "input_ascii": "Input:\nemployees table:\n+----+-------+--------+------------+\n| id | name  | salary | manager_id |\n+----+-------+--------+------------+\n| 1  | Joe   | 70000  | 3          |\n| 2  | Henry | 80000  | 4          |\n| 3  | Sam   | 60000  | Null       |\n| 4  | Max   | 90000  | Null       |\n+----+-------+--------+------------+",
+    "output_ascii": "Output:\n+---------------+--------------+\n| employee_name | manager_name |\n+---------------+--------------+\n| Joe           | Sam          |\n+---------------+--------------+",
+    "explanation": "Joe earns $70,000 which is more than his manager Sam who earns $60,000.",
+    "pandas_schema": "employees = pd.DataFrame([[1, 'Joe', 70000, 3], [3, 'Sam', 60000, None]], columns=['id', 'name', 'salary', 'manager_id'])",
+    "image_url": ""
   }
 ]

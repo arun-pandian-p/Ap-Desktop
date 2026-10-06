@@ -227,24 +227,34 @@ async function getSqlModule() {
   return await sqlInitPromise;
 }
 
-export async function getExerciseSqlDb(exerciseId: string = 'sql-1'): Promise<Database> {
+export async function getExerciseSqlDb(exerciseId: string = 'sql-175'): Promise<Database> {
   const existing = exerciseDbMap.get(exerciseId);
   if (existing) return existing;
 
   const SQL = await getSqlModule();
   const db = new SQL.Database();
 
-  const ex = sqlExercisesData.find(e => e.id === exerciseId) || sqlExercisesData[0];
+  let ex: any = (sqlExercisesData as any[]).find(e => e.id === exerciseId);
+  if (!ex) {
+    try {
+      const { fetchSqlExercises } = await import('@/services/db');
+      const list = await fetchSqlExercises();
+      ex = list.find(e => e.id === exerciseId);
+    } catch {}
+  }
+  if (!ex) {
+    ex = sqlExercisesData[0];
+  }
   if (ex) {
     if (ex.schema_sql) {
       // Split multiple statements if any
-      const stmts = ex.schema_sql.split(';').map(s => s.trim()).filter(Boolean);
+      const stmts = ex.schema_sql.split(';').map((s: string) => s.trim()).filter(Boolean);
       for (const s of stmts) {
         db.run(s);
       }
     }
     if (ex.seed_sql) {
-      const stmts = ex.seed_sql.split(';').map(s => s.trim()).filter(Boolean);
+      const stmts = ex.seed_sql.split(';').map((s: string) => s.trim()).filter(Boolean);
       for (const s of stmts) {
         db.run(s);
       }
@@ -265,7 +275,7 @@ export function resetExerciseSqlDb(exerciseId: string): void {
   }
 }
 
-export async function executeSqlQuery(query: string, exerciseId: string = 'sql-1'): Promise<SqlQueryResult> {
+export async function executeSqlQuery(query: string, exerciseId: string = 'sql-175'): Promise<SqlQueryResult> {
   const start = performance.now();
 
   const trimmed = query.trim().toUpperCase();
@@ -300,7 +310,14 @@ export async function executeSqlQuery(query: string, exerciseId: string = 'sql-1
 
     // Validate against exercise expected output
     let passed = true;
-    const exercise = sqlExercisesData.find(e => e.id === exerciseId);
+    let exercise: any = (sqlExercisesData as any[]).find(e => e.id === exerciseId);
+    if (!exercise) {
+      try {
+        const { fetchSqlExercises } = await import('@/services/db');
+        const list = await fetchSqlExercises();
+        exercise = list.find(e => e.id === exerciseId);
+      } catch {}
+    }
     if (exercise && exercise.expected_output_json) {
       try {
         const expected = JSON.parse(exercise.expected_output_json);

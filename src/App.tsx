@@ -32,7 +32,10 @@ export const App: React.FC = () => {
     return sessionStorage.getItem('ap_unlocked') === 'true';
   });
   const [accentColor, setAccentColor] = useState<AccentColor>('red');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ap_theme_mode') : null;
+    return (saved === 'dark' || saved === 'light' || saved === 'system') ? (saved as ThemeMode) : 'light';
+  });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const [license, setLicense] = useState<LicenseState>(getCurrentLicense());
@@ -83,6 +86,14 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // Sync theme changes with DOM and localStorage
+  useEffect(() => {
+    localStorage.setItem('ap_theme_mode', themeMode);
+    const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  }, [themeMode]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -118,11 +129,15 @@ export const App: React.FC = () => {
     return <LoginView onUnlock={handleUnlock} />;
   }
 
+  const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   return (
     <div 
-      className={`h-screen w-screen flex flex-col overflow-hidden bg-[#F7F8FC] font-sans antialiased ${themeMode === 'dark' ? 'dark' : ''}`}
+      className={`h-screen w-screen flex flex-col overflow-hidden font-sans antialiased transition-colors duration-200 ${
+        isDarkMode ? 'dark bg-[#090D16] text-[#F8FAFC]' : 'bg-[#F7F8FC] text-[#101828]'
+      }`}
       data-accent={accentColor}
-      data-theme={themeMode}
+      data-theme={isDarkMode ? 'dark' : 'light'}
     >
       {/* 1. Frameless Custom Title Bar */}
       <TitleBar
@@ -146,7 +161,9 @@ export const App: React.FC = () => {
           onLock={handleLock}
         />
 
-        <main className="flex-1 overflow-hidden bg-[#F7F8FC] relative">
+        <main className={`flex-1 overflow-hidden relative transition-colors duration-200 ${
+          isDarkMode ? 'bg-[#090D16]' : 'bg-[#F7F8FC]'
+        }`}>
           {currentScreen === 'dashboard' && (
             <DashboardView
               tasks={tasks}

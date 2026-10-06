@@ -152,6 +152,24 @@ export interface SqlExercise {
   initial_query?: string;
   solution_sql: string;
   expected_output_json: string;
+  schema_tables_ascii?: string;
+  input_ascii?: string;
+  output_ascii?: string;
+  explanation?: string;
+  pandas_schema?: string;
+  image_url?: string;
+}
+
+export interface PostgresExercise {
+  id: string;
+  title: string;
+  difficulty: DifficultyLevel;
+  category: string;
+  description: string;
+  setup_sql: string;
+  query_solution: string;
+  verification_sql?: string;
+  notes?: string;
 }
 
 export interface LicenseState {

@@ -2,7 +2,8 @@ import initSqlJs from 'sql.js';
 import type { Database } from 'sql.js';
 import seedData from '@/data/seedData.json';
 import sqlExercisesData from '@/data/sqlExercises.json';
-import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus } from '@/types';
+import postgresExercisesData from '@/data/postgresExercises.json';
+import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus, SqlExercise, PostgresExercise } from '@/types';
 
 const DB_STORAGE_KEY = 'ap_encrypted_sqlite_db_v1';
 const DB_HMAC_KEY = 'ap_tamper_evidence_root_key_2026';
@@ -52,7 +53,10 @@ export async function getDatabase(): Promise<Database> {
         bytes[i] = binaryString.charCodeAt(i);
       }
       const restored = new SQL.Database(bytes);
+      initializeSchema(restored);
+      await seedAdditionalTables(restored);
       dbInstance = restored;
+      persistDatabase();
       return restored;
     } catch (e) {
       console.warn('Failed to restore persisted DB, creating fresh instance:', e);
@@ -63,6 +67,7 @@ export async function getDatabase(): Promise<Database> {
   const freshDb = new SQL.Database();
   initializeSchema(freshDb);
   await seedInitialData(freshDb);
+  await seedAdditionalTables(freshDb);
   dbInstance = freshDb;
   persistDatabase();
 
@@ -212,7 +217,102 @@ function initializeSchema(db: Database): void {
       details_json TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS sql_exercises (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      difficulty TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      schema_sql TEXT NOT NULL,
+      seed_sql TEXT NOT NULL,
+      initial_query TEXT,
+      solution_sql TEXT NOT NULL,
+      expected_output_json TEXT,
+      schema_tables_ascii TEXT,
+      input_ascii TEXT,
+      output_ascii TEXT,
+      explanation TEXT,
+      pandas_schema TEXT,
+      image_url TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS postgres_exercises (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      difficulty TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      setup_sql TEXT NOT NULL,
+      query_solution TEXT NOT NULL,
+      verification_sql TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+}
+
+async function seedAdditionalTables(db: Database): Promise<void> {
+  try {
+    const sqlCount = db.exec(`SELECT COUNT(*) FROM sql_exercises`);
+    const hasSql = sqlCount.length > 0 && (sqlCount[0].values[0][0] as number) > 0;
+    const hasLeetcode175 = db.exec(`SELECT COUNT(*) FROM sql_exercises WHERE id = 'sql-175'`);
+    const needSqlSeed = !hasSql || !hasLeetcode175.length || (hasLeetcode175[0].values[0][0] as number) === 0;
+
+    if (needSqlSeed) {
+      for (const ex of sqlExercisesData as SqlExercise[]) {
+        db.run(
+          `INSERT OR REPLACE INTO sql_exercises 
+           (id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, schema_tables_ascii, input_ascii, output_ascii, explanation, pandas_schema, image_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ex.id,
+            ex.title,
+            ex.difficulty,
+            ex.category,
+            ex.description,
+            ex.schema_sql,
+            ex.seed_sql,
+            ex.initial_query || '',
+            ex.solution_sql,
+            ex.expected_output_json || '',
+            ex.schema_tables_ascii || '',
+            ex.input_ascii || '',
+            ex.output_ascii || '',
+            ex.explanation || '',
+            ex.pandas_schema || '',
+            ex.image_url || ''
+          ]
+        );
+      }
+    }
+
+    const pgCount = db.exec(`SELECT COUNT(*) FROM postgres_exercises`);
+    const hasPg = pgCount.length > 0 && (pgCount[0].values[0][0] as number) > 0;
+    if (!hasPg) {
+      for (const pg of postgresExercisesData as PostgresExercise[]) {
+        db.run(
+          `INSERT OR REPLACE INTO postgres_exercises 
+           (id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            pg.id,
+            pg.title,
+            pg.difficulty,
+            pg.category,
+            pg.description,
+            pg.setup_sql,
+            pg.query_solution,
+            pg.verification_sql || '',
+            pg.notes || ''
+          ]
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('Error in seedAdditionalTables:', err);
+  }
 }
 
 async function seedInitialData(db: Database): Promise<void> {
@@ -641,5 +741,256 @@ export async function vacuumDatabase(): Promise<void> {
   const db = await getDatabase();
   db.run('VACUUM;');
   persistDatabase();
+}
+
+// ==========================================
+// SQL Exercises DB APIs
+// ==========================================
+export async function fetchSqlExercises(): Promise<SqlExercise[]> {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT * FROM sql_exercises ORDER BY CASE WHEN id = 'sql-175' THEN 0 ELSE 1 END, id ASC`);
+    if (!res.length || !res[0].values.length) {
+      return sqlExercisesData as SqlExercise[];
+    }
+    const cols = res[0].columns;
+    return res[0].values.map(row => {
+      const obj: any = {};
+      cols.forEach((col, i) => { obj[col] = row[i]; });
+      return obj as SqlExercise;
+    });
+  } catch (err) {
+    return sqlExercisesData as SqlExercise[];
+  }
+}
+
+export async function importSqlExercisesFromCsv(csvText: string): Promise<{ imported: number; total: number }> {
+  const db = await getDatabase();
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length <= 1) return { imported: 0, total: 0 };
+
+  let importedCount = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVLine(lines[i]);
+    if (row.length < 5) continue;
+
+    const id = row[0] || `sql-${Date.now()}-${i}`;
+    const title = row[1] || 'SQL Challenge';
+    const difficulty = (row[2] || 'Medium') as any;
+    const category = row[3] || 'General SQL';
+    const description = row[4] || '';
+    const schema_sql = row[5] || '';
+    const seed_sql = row[6] || '';
+    const initial_query = row[7] || '';
+    const solution_sql = row[8] || '';
+    const expected_output_json = row[9] || '[]';
+    const input_ascii = row[10] || '';
+    const output_ascii = row[11] || '';
+    const explanation = row[12] || '';
+    const image_url = row[13] || '';
+
+    db.run(
+      `INSERT OR REPLACE INTO sql_exercises 
+       (id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url]
+    );
+    importedCount++;
+  }
+
+  persistDatabase();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_sql_exercises_updated'));
+  }
+
+  const countRes = db.exec(`SELECT COUNT(*) FROM sql_exercises`);
+  const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : importedCount;
+  return { imported: importedCount, total };
+}
+
+export async function exportSqlExercisesToCsv(): Promise<string> {
+  const exercises = await fetchSqlExercises();
+  if (!exercises.length) return '';
+  const headers = ['id', 'title', 'difficulty', 'category', 'description', 'schema_sql', 'seed_sql', 'initial_query', 'solution_sql', 'expected_output_json', 'input_ascii', 'output_ascii', 'explanation', 'image_url'];
+  let csv = headers.join(',') + '\n';
+  for (const ex of exercises) {
+    const row = [
+      ex.id,
+      ex.title,
+      ex.difficulty,
+      ex.category,
+      ex.description,
+      ex.schema_sql,
+      ex.seed_sql,
+      ex.initial_query || '',
+      ex.solution_sql,
+      ex.expected_output_json || '',
+      ex.input_ascii || '',
+      ex.output_ascii || '',
+      ex.explanation || '',
+      ex.image_url || ''
+    ].map(v => {
+      const s = String(v ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    });
+    csv += row.join(',') + '\n';
+  }
+  return csv;
+}
+
+export async function getSqlCurriculumStats() {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN difficulty = 'Easy' THEN 1 ELSE 0 END) as easy,
+      SUM(CASE WHEN difficulty = 'Medium' THEN 1 ELSE 0 END) as medium,
+      SUM(CASE WHEN difficulty = 'Hard' THEN 1 ELSE 0 END) as hard,
+      COUNT(DISTINCT category) as categories
+      FROM sql_exercises`);
+
+    if (!res.length || !res[0].values.length) {
+      return { total: sqlExercisesData.length, easy: 5, medium: 3, hard: 2, categories: 4 };
+    }
+    const row = res[0].values[0];
+    return {
+      total: (row[0] as number) || sqlExercisesData.length,
+      easy: (row[1] as number) || 0,
+      medium: (row[2] as number) || 0,
+      hard: (row[3] as number) || 0,
+      categories: (row[4] as number) || 1,
+    };
+  } catch {
+    return { total: sqlExercisesData.length, easy: 5, medium: 3, hard: 2, categories: 4 };
+  }
+}
+
+// ==========================================
+// PostgreSQL Lab DB APIs
+// ==========================================
+export async function fetchPostgresExercises(): Promise<PostgresExercise[]> {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT * FROM postgres_exercises ORDER BY id ASC`);
+    if (!res.length || !res[0].values.length) {
+      return postgresExercisesData as PostgresExercise[];
+    }
+    const cols = res[0].columns;
+    return res[0].values.map(row => {
+      const obj: any = {};
+      cols.forEach((col, i) => { obj[col] = row[i]; });
+      return obj as PostgresExercise;
+    });
+  } catch (err) {
+    return postgresExercisesData as PostgresExercise[];
+  }
+}
+
+export async function importPostgresExercisesFromCsv(csvText: string): Promise<{ imported: number; total: number }> {
+  const db = await getDatabase();
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length <= 1) return { imported: 0, total: 0 };
+
+  let importedCount = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVLine(lines[i]);
+    if (row.length < 4) continue;
+
+    const id = row[0] || `pg-${Date.now()}-${i}`;
+    const title = row[1] || 'PostgreSQL Lab Exercise';
+    const difficulty = (row[2] || 'Medium') as any;
+    const category = row[3] || 'System Catalogs';
+    const description = row[4] || '';
+    const setup_sql = row[5] || '';
+    const query_solution = row[6] || '';
+    const verification_sql = row[7] || '';
+    const notes = row[8] || '';
+
+    db.run(
+      `INSERT OR REPLACE INTO postgres_exercises 
+       (id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes]
+    );
+    importedCount++;
+  }
+
+  persistDatabase();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_postgres_exercises_updated'));
+  }
+
+  const countRes = db.exec(`SELECT COUNT(*) FROM postgres_exercises`);
+  const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : importedCount;
+  return { imported: importedCount, total };
+}
+
+export async function exportPostgresExercisesToCsv(): Promise<string> {
+  const exercises = await fetchPostgresExercises();
+  if (!exercises.length) return '';
+  const headers = ['id', 'title', 'difficulty', 'category', 'description', 'setup_sql', 'query_solution', 'verification_sql', 'notes'];
+  let csv = headers.join(',') + '\n';
+  for (const ex of exercises) {
+    const row = [
+      ex.id,
+      ex.title,
+      ex.difficulty,
+      ex.category,
+      ex.description,
+      ex.setup_sql,
+      ex.query_solution,
+      ex.verification_sql || '',
+      ex.notes || ''
+    ].map(v => {
+      const s = String(v ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    });
+    csv += row.join(',') + '\n';
+  }
+  return csv;
+}
+
+export async function getPostgresCurriculumStats() {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN difficulty = 'Easy' THEN 1 ELSE 0 END) as easy,
+      SUM(CASE WHEN difficulty = 'Medium' THEN 1 ELSE 0 END) as medium,
+      SUM(CASE WHEN difficulty = 'Hard' THEN 1 ELSE 0 END) as hard,
+      COUNT(DISTINCT category) as categories
+      FROM postgres_exercises`);
+
+    if (!res.length || !res[0].values.length) {
+      return { total: postgresExercisesData.length, easy: 1, medium: 2, hard: 1, categories: 3 };
+    }
+    const row = res[0].values[0];
+    return {
+      total: (row[0] as number) || postgresExercisesData.length,
+      easy: (row[1] as number) || 0,
+      medium: (row[2] as number) || 0,
+      hard: (row[3] as number) || 0,
+      categories: (row[4] as number) || 1,
+    };
+  } catch {
+    return { total: postgresExercisesData.length, easy: 1, medium: 2, hard: 1, categories: 3 };
+  }
+}
+
+// Sample CSV Generators for each Category
+export function generateSampleCsv(category: 'python' | 'sql' | 'postgres'): string {
+  if (category === 'python') {
+    return `order_num,title,pattern_name,subtopic_name,platform,difficulty,practice_link,video_link,hint_link\n1,"Two Sum","Two Pointers - Technique","Array Basics","LeetCode","Easy","https://leetcode.com/problems/two-sum/","",""\n2,"Valid Parentheses","Stack","Parentheses","LeetCode","Easy","https://leetcode.com/problems/valid-parentheses/","",""`;
+  }
+  if (category === 'sql') {
+    return `id,title,difficulty,category,description,schema_sql,seed_sql,initial_query,solution_sql,expected_output_json,input_ascii,output_ascii,explanation,image_url\n"sql-175","175. Combine Two Tables","Easy","JOINs","Write a solution to report the first name, last name, city, and state of each person in the Person table.","CREATE TABLE Person (personId INT PRIMARY KEY, lastName VARCHAR(50), firstName VARCHAR(50)); CREATE TABLE Address (addressId INT PRIMARY KEY, personId INT, city VARCHAR(50), state VARCHAR(50));","INSERT INTO Person VALUES (1, 'Wang', 'Allen'), (2, 'Alice', 'Bob'); INSERT INTO Address VALUES (1, 2, 'New York City', 'New York');","SELECT firstName, lastName, city, state FROM Person LEFT JOIN Address ON Person.personId = Address.personId;","SELECT firstName, lastName, city, state FROM Person LEFT JOIN Address ON Person.personId = Address.personId;","[{\\"firstName\\":\\"Allen\\",\\"lastName\\":\\"Wang\\",\\"city\\":null,\\"state\\":null}]","Input:\\nPerson table:\\n+----------+----------+-----------+\\n| personId | lastName | firstName |\\n+----------+----------+-----------+\\n| 1        | Wang     | Allen     |","Output:\\n+-----------+----------+---------------+----------+\\n| firstName | lastName | city          | state    |\\n+-----------+----------+---------------+----------+\\n| Allen     | Wang     | Null          | Null     |","If address not found, return null.",""`;
+  }
+  return `id,title,difficulty,category,description,setup_sql,query_solution,verification_sql,notes\n"pg-1","PostgreSQL 16 Diagnostic & Catalog Inspection","Easy","System Catalogs","Inspect PostgreSQL server metadata from pg_stat_database.","SELECT version(), current_database(), current_user;","SELECT datname, numbackends, xact_commit FROM pg_stat_database WHERE datname = current_database();","SELECT count(*) FROM pg_stat_database;","Genuine server query"`;
 }
 
