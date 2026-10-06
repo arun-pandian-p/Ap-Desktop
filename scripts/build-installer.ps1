@@ -62,25 +62,30 @@ if (-not (Test-Path $ReleaseDir)) {
     New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 }
 
-# 4. Step 4: Check or Stage Native Binary
+# 4. Step 4: Validate Native PE Executable Binary
 $ExeTarget = "$ProjectRoot\src-tauri\target\release\Ap.exe"
-if (-not (Test-Path $ExeTarget)) {
-    New-Item -ItemType Directory -Path "$ProjectRoot\src-tauri\target\release" -Force | Out-Null
+$isRealBinary = $false
+if (Test-Path $ExeTarget) {
+    $bytes = [System.IO.File]::ReadAllBytes($ExeTarget)
+    if ($bytes.Length -gt 1024 -and $bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+        $isRealBinary = $true
+    }
 }
 
-Write-Host "`n[3/4] Inno Setup Script Verification..." -ForegroundColor Yellow
+Write-Host "`n[3/4] Inno Setup Packaging..." -ForegroundColor Yellow
 $IssFile = "$ProjectRoot\installer\ap_installer.iss"
 
-if (Test-Path $ExeTarget) {
+if ($isRealBinary) {
     & "$IsccPath" "$IssFile"
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  [OK] Inno Setup compilation succeeded!" -ForegroundColor Green
+        Write-Host "  [OK] Inno Setup compilation succeeded with verified native executable!" -ForegroundColor Green
     } else {
         Write-Warning "Inno Setup compilation encountered an issue."
     }
 } else {
-    Write-Host "  [READY] Inno Setup script validated at: $IssFile" -ForegroundColor Cyan
-    Write-Host "  (Run compilation after building native Ap.exe via Visual Studio C++ Build Tools)" -ForegroundColor Gray
+    Write-Host "  [INFO] src-tauri\target\release\Ap.exe is not yet compiled as a native PE binary." -ForegroundColor DarkYellow
+    Write-Host "  [READY] Inno Setup script is validated and ready at: $IssFile" -ForegroundColor Cyan
+    Write-Host "  Trigger the GitHub Actions workflow (.github/workflows/build-release.yml) to compile the native Rust binary and package the release." -ForegroundColor Gray
 }
 
 # 5. Step 5: Checksum and Release Inventory
