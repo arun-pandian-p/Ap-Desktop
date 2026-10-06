@@ -13,6 +13,7 @@ export type ScreenId =
   | 'review'
   | 'reports'
   | 'settings'
+  | 'profile'
   | 'login';
 
 export type AccentColor =
@@ -170,4 +171,32 @@ export interface IntegrityStatus {
   db_chain_ok: boolean;
   interpreter_ok: boolean;
   last_check: string;
+}
+
+export interface UserProfile {
+  name: string;
+  username: string;
+  email: string;
+  avatarUrl?: string;
+  rank: number;
+  bio: string;
+  location: string;
+  institution: string;
+  website: string;
+  github: string;
+  linkedin: string;
+  twitter: string;
+  skills: string[];
+  contestRating: number;
+  globalRanking: string;
+  attendedContests: number;
+  solved: {
+    total: number;
+    easy: number;
+    easyTotal: number;
+    medium: number;
+    mediumTotal: number;
+    hard: number;
+    hardTotal: number;
+  };
 }

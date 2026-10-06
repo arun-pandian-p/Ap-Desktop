@@ -27,9 +27,11 @@ import {
   User,
   Mail,
   AtSign,
-  Play
+  Play,
+  Camera,
+  ExternalLink
 } from 'lucide-react';
-import { AccentColor, ThemeMode, LicenseState } from '@/types';
+import { AccentColor, ThemeMode, LicenseState, ScreenId, UserProfile } from '@/types';
 import { getIntegrityDiagnostics, getRecentSecurityEvents } from '@/services/integrity';
 import { getMachineFingerprint, saveLicense } from '@/services/license';
 import { 
@@ -42,6 +44,8 @@ import {
   setAppSetting
 } from '@/services/db';
 import { getPythonInterpreterInfo, PythonInterpreterInfo, executePythonCode } from '@/services/runner';
+import { getUserProfile, saveUserProfile } from '@/services/profile';
+import { EditProfileModal } from '@/components/dialogs/EditProfileModal';
 
 interface SettingsViewProps {
   accentColor: AccentColor;
@@ -52,6 +56,7 @@ interface SettingsViewProps {
   onRefreshLicense: () => void;
   onShowToast: (msg: string, type?: 'success' | 'warning' | 'error') => void;
   onOpenBackupModal: () => void;
+  onNavigate?: (screen: ScreenId) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -63,6 +68,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRefreshLicense,
   onShowToast,
   onOpenBackupModal,
+  onNavigate,
 }) => {
   const [activeSection, setActiveSection] = useState<
     'appearance' | 'general' | 'problems_settings' | 'storage' | 'python' | 'security' | 'backup' | 'about'
@@ -73,6 +79,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [pyInfo, setPyInfo] = useState<PythonInterpreterInfo | null>(null);
 
   // General Preferences state
+  const [userProfile, setUserProfile] = useState<UserProfile>(getUserProfile());
   const [userName, setUserName] = useState('Arun Pandian');
   const [userHandle, setUserHandle] = useState('arun4709s');
   const [userEmail, setUserEmail] = useState('arunpandi47777@gmail.com');
@@ -82,6 +89,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [autoSave, setAutoSave] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
 
   // Problems Settings & Stats
   const [curriculumStats, setCurriculumStats] = useState({ total: 1337, easy: 450, medium: 650, hard: 237, patterns: 50 });
@@ -106,6 +115,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const stats = await getCurriculumStats();
       setCurriculumStats(stats);
 
+      const profile = getUserProfile();
+      setUserProfile(profile);
+      if (profile.name) setUserName(profile.name);
+      if (profile.username) setUserHandle(profile.username);
+      if (profile.email) setUserEmail(profile.email);
+
       const settings = await fetchAppSettings();
       if (settings.user_name) setUserName(settings.user_name);
       if (settings.user_handle) setUserHandle(settings.user_handle);
@@ -113,6 +128,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       if (settings.idle_threshold_minutes) setIdleThreshold(settings.idle_threshold_minutes);
     }
     initSettings();
+
+    const handleProfileSync = (e: any) => {
+      if (e.detail) {
+        setUserProfile(e.detail);
+        if (e.detail.name) setUserName(e.detail.name);
+        if (e.detail.username) setUserHandle(e.detail.username);
+        if (e.detail.email) setUserEmail(e.detail.email);
+      }
+    };
+    window.addEventListener('ap_profile_updated', handleProfileSync);
+    return () => window.removeEventListener('ap_profile_updated', handleProfileSync);
   }, []);
 
   const diagnostics = getIntegrityDiagnostics();
@@ -129,10 +155,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     await setAppSetting('idle_threshold_minutes', idleThreshold);
     await setAppSetting('focus_duration', focusDuration);
     await setAppSetting('break_duration', breakDuration);
+
+    const updated = await saveUserProfile({
+      name: userName,
+      username: userHandle,
+      email: userEmail,
+    });
+    setUserProfile(updated);
+    setShowSaveSuccessPopup(true);
+
     setTimeout(() => {
+      setShowSaveSuccessPopup(false);
       setIsSavingGeneral(false);
-      onShowToast('Settings updated in real time!', 'success');
-    }, 400);
+      onShowToast('Settings and profile updated in real time!', 'success');
+    }, 1200);
   };
 
   // CSV/XLSX Upload Handler
@@ -369,6 +405,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   {isSavingGeneral ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span>Save Changes in Real Time</span>
                 </button>
+              </div>
+
+              {/* Developer Profile Portfolio & Photo Card */}
+              <div className="p-4 bg-gradient-to-r from-gray-50 via-red-50/20 to-gray-50 rounded-2xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div 
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="relative group w-14 h-14 rounded-2xl bg-gray-200 border-2 border-white shadow-md overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
+                    title="Click to change profile photo (Drag & Drop or browse)"
+                  >
+                    {userProfile.avatarUrl ? (
+                      <img src={userProfile.avatarUrl} alt={userProfile.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-[#E11D26] text-white font-extrabold text-lg flex items-center justify-center">
+                        {userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AP'}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[9px] font-bold">
+                      <Camera className="w-3.5 h-3.5 mb-0.5" />
+                      <span>Change</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      <span>{userProfile.name}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 font-mono font-semibold border border-cyan-200">
+                        Rank #{userProfile.rank}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-gray-500 font-mono mt-0.5">@{userProfile.username} • {userProfile.email}</p>
+                    <p className="text-[11px] text-gray-400 italic mt-0.5">"{userProfile.bio}"</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-[#E11D26]" />
+                    <span>Change Photo</span>
+                  </button>
+
+                  {onNavigate && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('profile')}
+                      className="px-3.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>View Profile & Heatmap</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Developer Profile Inputs */}
@@ -811,6 +903,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         </div>
       </div>
+
+      {/* Edit Profile & Photo Modal */}
+      <EditProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        profile={userProfile}
+        onSave={(updated) => {
+          setUserProfile(updated);
+          setUserName(updated.name);
+          setUserHandle(updated.username);
+          setUserEmail(updated.email);
+          onShowToast('Profile photo and details updated!', 'success');
+        }}
+      />
+
+      {/* Emerald Green Tick Update Confirmation Popup (Matching Design System) */}
+      {showSaveSuccessPopup && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-xs animate-in fade-in duration-100">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-gray-100 max-w-sm w-full mx-4 text-center animate-in zoom-in-95 duration-150">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 mx-auto flex items-center justify-center mb-3 shadow-xs">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 stroke-[2.5]" />
+            </div>
+            <h4 className="text-base font-bold text-gray-900">Settings Saved in Real Time</h4>
+            <p className="text-xs text-gray-500 mt-1">
+              Your profile changes, photo, and preferences have been synchronized!
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

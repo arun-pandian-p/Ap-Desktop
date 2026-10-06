@@ -19,6 +19,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { ScreenId, LicenseState } from '@/types';
+import { getUserProfile, DEFAULT_USER_PROFILE } from '@/services/profile';
 
 interface SidebarProps {
   currentScreen: ScreenId;
@@ -37,6 +38,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   onLock,
 }) => {
+  const [userProfile, setUserProfile] = React.useState(getUserProfile());
+
+  React.useEffect(() => {
+    const handleUpdate = (e: any) => {
+      if (e.detail) setUserProfile(e.detail);
+    };
+    window.addEventListener('ap_profile_updated', handleUpdate);
+    return () => window.removeEventListener('ap_profile_updated', handleUpdate);
+  }, []);
+
   const navItems = [
     { id: 'dashboard' as ScreenId, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tracks' as ScreenId, label: 'Learning Tracks', icon: Map },
@@ -119,19 +130,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Pinned User Card at Bottom */}
       <div className="p-3 border-t border-[#E8EAF2] bg-[#F7F8FC]/50">
         <div className={`flex items-center gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
-          <div 
-            className="w-8 h-8 rounded-full bg-[#E11D26] text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-xs"
-            title="Arun Pandian (arun4709s)"
+          <button 
+            type="button"
+            onClick={() => onNavigate('profile')}
+            className="w-8 h-8 rounded-full bg-[#E11D26] text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-xs cursor-pointer hover:ring-2 hover:ring-[#E11D26]/40 transition-all overflow-hidden"
+            title={`${userProfile.name} (@${userProfile.username}) - Click to view profile`}
           >
-            AP
-          </div>
+            {userProfile.avatarUrl ? (
+              <img src={userProfile.avatarUrl} alt={userProfile.name} className="w-full h-full object-cover" />
+            ) : (
+              userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AP'
+            )}
+          </button>
 
           {!isCollapsed ? (
             <div className="flex flex-col flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-900 truncate" title="Arun Pandian">
-                  Arun Pandian
-                </span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('profile')}
+                  className="text-xs font-bold text-gray-900 truncate hover:text-[#E11D26] transition-colors text-left cursor-pointer"
+                  title={`${userProfile.name} - View Profile`}
+                >
+                  {userProfile.name}
+                </button>
                 <div className="flex items-center gap-1">
                   {onLock && (
                     <button
@@ -156,7 +178,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <Crown className="w-3 h-3 fill-amber-500 text-amber-500" />
                   <span>{license.edition === 'pro' ? 'Pro Plan' : 'Free Tier'}</span>
                 </div>
-                <span className="text-gray-400 text-[10px] font-mono truncate">arun4709s</span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('profile')}
+                  className="text-gray-400 hover:text-gray-600 text-[10px] font-mono truncate text-left cursor-pointer"
+                >
+                  {userProfile.username}
+                </button>
               </div>
             </div>
           ) : (

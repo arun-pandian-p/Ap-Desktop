@@ -20,6 +20,7 @@ import { AnalyticsView } from '@/features/analytics/AnalyticsView';
 import { DailyReviewView } from '@/features/review/DailyReviewView';
 import { ReportsView } from '@/features/reports/ReportsView';
 import { SettingsView } from '@/features/settings/SettingsView';
+import { ProfileView } from '@/features/profile/ProfileView';
 import { LoginView } from '@/features/auth/LoginView';
 
 import { getDatabase, fetchTasks, addTask, updateTaskStatus, fetchStats } from '@/services/db';
@@ -231,6 +232,14 @@ export const App: React.FC = () => {
               onRefreshLicense={() => setLicense(getCurrentLicense())}
               onShowToast={addToast}
               onOpenBackupModal={() => setIsBackupOpen(true)}
+              onNavigate={setCurrentScreen}
+            />
+          )}
+
+          {currentScreen === 'profile' && (
+            <ProfileView
+              onNavigate={setCurrentScreen}
+              onShowToast={addToast}
             />
           )}
         </main>

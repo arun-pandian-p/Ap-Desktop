@@ -13,6 +13,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { ScreenId } from '@/types';
+import { getUserProfile } from '@/services/profile';
 
 interface TitleBarProps {
   currentScreen: ScreenId;
@@ -33,6 +34,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onNavigate,
   onLock,
 }) => {
+  const [profile, setProfile] = React.useState(getUserProfile());
+
+  React.useEffect(() => {
+    const handleUpdate = (e: any) => {
+      if (e.detail) setProfile(e.detail);
+    };
+    window.addEventListener('ap_profile_updated', handleUpdate);
+    return () => window.removeEventListener('ap_profile_updated', handleUpdate);
+  }, []);
   const handleMinimize = async () => {
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -122,11 +132,24 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* Notification Bell */}
         <button
           onClick={() => onNavigate('reports')}
-          className="relative p-1.5 text-gray-500 hover:text-gray-900 hover:bg-[#F1F3F9] rounded-lg transition-colors"
+          className="relative p-1.5 text-gray-500 hover:text-gray-900 hover:bg-[#F1F3F9] rounded-lg transition-colors cursor-pointer"
           title="Notifications & Reports"
         >
           <Bell className="w-4 h-4" />
           <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#E11D26] ring-2 ring-white"></span>
+        </button>
+
+        {/* User Profile Avatar */}
+        <button
+          onClick={() => onNavigate('profile')}
+          className="w-7 h-7 rounded-full bg-[#E11D26] text-white font-extrabold text-[11px] flex items-center justify-center shrink-0 shadow-xs cursor-pointer hover:ring-2 hover:ring-[#E11D26]/40 transition-all overflow-hidden"
+          title={`${profile.name} (@${profile.username}) - View Developer Profile`}
+        >
+          {profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            profile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AP'
+          )}
         </button>
 
         {/* Log Out Workspace Trigger */}

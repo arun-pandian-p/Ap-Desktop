@@ -11,7 +11,8 @@ import {
   FileText, 
   Code2, 
   X,
-  ArrowRight
+  ArrowRight,
+  User
 } from 'lucide-react';
 import { ScreenId } from '@/types';
 
@@ -80,6 +81,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Filter by 50 DSA patterns, difficulty, or platform',
       icon: Code2,
       run: () => { onClose(); onNavigate('problems'); }
+    },
+    {
+      id: 'developer-profile',
+      title: 'Open Developer Profile & Portfolio',
+      subtitle: 'View LeetCode stats, solved problems dial, and 52-week activity heatmap',
+      icon: User,
+      run: () => { onClose(); onNavigate('profile'); }
     },
   ];
 
