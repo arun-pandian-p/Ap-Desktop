@@ -1,0 +1,122 @@
+[
+  {
+    "id": "sql-1",
+    "title": "High Earners in Engineering",
+    "difficulty": "Easy",
+    "category": "SELECT & WHERE",
+    "description": "Find all employees in the 'Engineering' department earning more than $75,000. Order by salary descending.",
+    "schema_sql": "CREATE TABLE employees (id INT PRIMARY KEY, name VARCHAR(100), department VARCHAR(50), salary INT, hire_date DATE);",
+    "seed_sql": "INSERT INTO employees VALUES (1, 'Arun Kumar', 'Engineering', 92000, '2022-03-15'), (2, 'Priya Sharma', 'Engineering', 74000, '2023-01-10'), (3, 'Vikram Mehta', 'Marketing', 68000, '2021-06-20'), (4, 'Ananya Patel', 'Engineering', 105000, '2020-11-01'), (5, 'Rohan Das', 'Sales', 72000, '2022-08-14');",
+    "initial_query": "SELECT name, salary FROM employees WHERE department = 'Engineering' AND salary > 75000 ORDER BY salary DESC;",
+    "solution_sql": "SELECT name, salary FROM employees WHERE department = 'Engineering' AND salary > 75000 ORDER BY salary DESC;",
+    "expected_output_json": "[{\"name\":\"Ananya Patel\",\"salary\":105000},{\"name\":\"Arun Kumar\",\"salary\":92000}]"
+  },
+  {
+    "id": "sql-2",
+    "title": "Department Average Salary",
+    "difficulty": "Medium",
+    "category": "Aggregations",
+    "description": "Calculate the average salary and total employee count per department for departments with at least 2 employees. Round average salary to 2 decimal places.",
+    "schema_sql": "CREATE TABLE employees (id INT PRIMARY KEY, name VARCHAR(100), department VARCHAR(50), salary INT);",
+    "seed_sql": "INSERT INTO employees VALUES (1, 'Arun', 'Engineering', 90000), (2, 'Priya', 'Engineering', 80000), (3, 'Vikram', 'Marketing', 65000), (4, 'Ananya', 'Marketing', 75000), (5, 'Rohan', 'Sales', 70000);",
+    "initial_query": "SELECT department, COUNT(*) as employee_count, ROUND(AVG(salary), 2) as avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2 ORDER BY avg_salary DESC;",
+    "solution_sql": "SELECT department, COUNT(*) as employee_count, ROUND(AVG(salary), 2) as avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2 ORDER BY avg_salary DESC;",
+    "expected_output_json": "[{\"department\":\"Engineering\",\"employee_count\":2,\"avg_salary\":85000},{\"department\":\"Marketing\",\"employee_count\":2,\"avg_salary\":70000}]"
+  },
+  {
+    "id": "sql-3",
+    "title": "Customer Total Order Value (JOIN)",
+    "difficulty": "Medium",
+    "category": "JOINs",
+    "description": "Find total spending for each customer who has placed orders. Return customer name and total amount spent.",
+    "schema_sql": "CREATE TABLE customers (id INT PRIMARY KEY, name VARCHAR(100)); CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT, amount INT);",
+    "seed_sql": "INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie'); INSERT INTO orders VALUES (101, 1, 250), (102, 1, 150), (103, 2, 500);",
+    "initial_query": "SELECT c.name, SUM(o.amount) as total_spent FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.name ORDER BY total_spent DESC;",
+    "solution_sql": "SELECT c.name, SUM(o.amount) as total_spent FROM customers c JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.name ORDER BY total_spent DESC;",
+    "expected_output_json": "[{\"name\":\"Bob\",\"total_spent\":500},{\"name\":\"Alice\",\"total_spent\":400}]"
+  },
+  {
+    "id": "sql-4",
+    "title": "Rank Salaries by Department (Window Functions)",
+    "difficulty": "Hard",
+    "category": "Window Functions",
+    "description": "Compute the rank of each employee's salary within their department using DENSE_RANK().",
+    "schema_sql": "CREATE TABLE employees (id INT PRIMARY KEY, name VARCHAR(100), department VARCHAR(50), salary INT);",
+    "seed_sql": "INSERT INTO employees VALUES (1, 'Alice', 'Sales', 70000), (2, 'Bob', 'Sales', 70000), (3, 'Charlie', 'Sales', 60000), (4, 'David', 'Tech', 95000), (5, 'Eve', 'Tech', 90000);",
+    "initial_query": "SELECT name, department, salary, DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as salary_rank FROM employees ORDER BY department, salary_rank;",
+    "solution_sql": "SELECT name, department, salary, DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as salary_rank FROM employees ORDER BY department, salary_rank;",
+    "expected_output_json": "[{\"name\":\"Alice\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Bob\",\"department\":\"Sales\",\"salary\":70000,\"salary_rank\":1},{\"name\":\"Charlie\",\"department\":\"Sales\",\"salary\":60000,\"salary_rank\":2},{\"name\":\"David\",\"department\":\"Tech\",\"salary\":95000,\"salary_rank\":1},{\"name\":\"Eve\",\"department\":\"Tech\",\"salary\":90000,\"salary_rank\":2}]"
+  },
+  {
+    "id": "sql-5",
+    "title": "Customers With No Orders (LEFT JOIN)",
+    "difficulty": "Easy",
+    "category": "JOINs",
+    "description": "Find all customers who have never placed an order in the database.",
+    "schema_sql": "CREATE TABLE customers (id INT PRIMARY KEY, name VARCHAR(100)); CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT, amount INT);",
+    "seed_sql": "INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie'), (4, 'David'); INSERT INTO orders VALUES (101, 1, 200), (102, 2, 450);",
+    "initial_query": "SELECT c.name FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE o.id IS NULL ORDER BY c.name ASC;",
+    "solution_sql": "SELECT c.name FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE o.id IS NULL ORDER BY c.name ASC;",
+    "expected_output_json": "[{\"name\":\"Charlie\"},{\"name\":\"David\"}]"
+  },
+  {
+    "id": "sql-6",
+    "title": "Top Selling Products (LIMIT & ORDER)",
+    "difficulty": "Easy",
+    "category": "SELECT & WHERE",
+    "description": "Find the top 3 highest selling products sorted by quantity sold in descending order.",
+    "schema_sql": "CREATE TABLE products (id INT PRIMARY KEY, product_name VARCHAR(100), units_sold INT);",
+    "seed_sql": "INSERT INTO products VALUES (1, 'Mechanical Keyboard', 1420), (2, '4K Monitor', 890), (3, 'Wireless Mouse', 3100), (4, 'USB-C Dock', 2150), (5, 'Webcam', 670);",
+    "initial_query": "SELECT product_name, units_sold FROM products ORDER BY units_sold DESC LIMIT 3;",
+    "solution_sql": "SELECT product_name, units_sold FROM products ORDER BY units_sold DESC LIMIT 3;",
+    "expected_output_json": "[{\"product_name\":\"Wireless Mouse\",\"units_sold\":3100},{\"product_name\":\"USB-C Dock\",\"units_sold\":2150},{\"product_name\":\"Mechanical Keyboard\",\"units_sold\":1420}]"
+  },
+  {
+    "id": "sql-7",
+    "title": "Second Highest Salary (Subquery)",
+    "difficulty": "Medium",
+    "category": "Subqueries",
+    "description": "Find the second highest distinct salary among all employees.",
+    "schema_sql": "CREATE TABLE employees (id INT PRIMARY KEY, name VARCHAR(100), salary INT);",
+    "seed_sql": "INSERT INTO employees VALUES (1, 'Arun', 120000), (2, 'Priya', 110000), (3, 'Vikram', 95000), (4, 'Ananya', 120000), (5, 'Rohan', 85000);",
+    "initial_query": "SELECT MAX(salary) as second_highest_salary FROM employees WHERE salary < (SELECT MAX(salary) FROM employees);",
+    "solution_sql": "SELECT MAX(salary) as second_highest_salary FROM employees WHERE salary < (SELECT MAX(salary) FROM employees);",
+    "expected_output_json": "[{\"second_highest_salary\":110000}]"
+  },
+  {
+    "id": "sql-8",
+    "title": "Duplicate Email Addresses",
+    "difficulty": "Easy",
+    "category": "Aggregations",
+    "description": "Find all duplicate emails registered in the users table.",
+    "schema_sql": "CREATE TABLE users (id INT PRIMARY KEY, email VARCHAR(150));",
+    "seed_sql": "INSERT INTO users VALUES (1, 'john@example.com'), (2, 'bob@example.com'), (3, 'john@example.com'), (4, 'alice@example.com'), (5, 'bob@example.com');",
+    "initial_query": "SELECT email FROM users GROUP BY email HAVING COUNT(*) > 1 ORDER BY email ASC;",
+    "solution_sql": "SELECT email FROM users GROUP BY email HAVING COUNT(*) > 1 ORDER BY email ASC;",
+    "expected_output_json": "[{\"email\":\"bob@example.com\"},{\"email\":\"john@example.com\"}]"
+  },
+  {
+    "id": "sql-9",
+    "title": "Active Projects Budget Overview",
+    "difficulty": "Medium",
+    "category": "Aggregations",
+    "description": "Calculate total budget and project count for each department having active projects.",
+    "schema_sql": "CREATE TABLE projects (id INT PRIMARY KEY, department VARCHAR(50), budget INT, status VARCHAR(20));",
+    "seed_sql": "INSERT INTO projects VALUES (1, 'Engineering', 50000, 'active'), (2, 'Engineering', 75000, 'active'), (3, 'Marketing', 30000, 'completed'), (4, 'Marketing', 45000, 'active'), (5, 'Sales', 20000, 'active');",
+    "initial_query": "SELECT department, COUNT(*) as project_count, SUM(budget) as total_budget FROM projects WHERE status = 'active' GROUP BY department ORDER BY total_budget DESC;",
+    "solution_sql": "SELECT department, COUNT(*) as project_count, SUM(budget) as total_budget FROM projects WHERE status = 'active' GROUP BY department ORDER BY total_budget DESC;",
+    "expected_output_json": "[{\"department\":\"Engineering\",\"project_count\":2,\"total_budget\":125000},{\"department\":\"Marketing\",\"project_count\":1,\"total_budget\":45000},{\"department\":\"Sales\",\"project_count\":1,\"total_budget\":20000}]"
+  },
+  {
+    "id": "sql-10",
+    "title": "Employee Manager Hierarchy (SELF JOIN)",
+    "difficulty": "Hard",
+    "category": "JOINs",
+    "description": "Find employees who earn more than their direct managers. Return the employee name and their manager name.",
+    "schema_sql": "CREATE TABLE employees (id INT PRIMARY KEY, name VARCHAR(100), salary INT, manager_id INT);",
+    "seed_sql": "INSERT INTO employees VALUES (1, 'Joe', 70000, 3), (2, 'Henry', 80000, 4), (3, 'Sam', 60000, NULL), (4, 'Max', 90000, NULL);",
+    "initial_query": "SELECT e.name as employee_name, m.name as manager_name FROM employees e JOIN employees m ON e.manager_id = m.id WHERE e.salary > m.salary;",
+    "solution_sql": "SELECT e.name as employee_name, m.name as manager_name FROM employees e JOIN employees m ON e.manager_id = m.id WHERE e.salary > m.salary;",
+    "expected_output_json": "[{\"employee_name\":\"Joe\",\"manager_name\":\"Sam\"}]"
+  }
+]

@@ -1,0 +1,21 @@
+[package]
+name = "ap-desktop"
+version = "1.0.0"
+description = "Security-Hardened Developer Practice & Preparation Platform"
+authors = ["Arun Pandian <arunpandi47777@gmail.com>"]
+edition = "2021"
+
+[lib]
+name = "ap_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-single-instance = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+dirs = "5.0"

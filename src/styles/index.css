@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default: Light Shell */
+  --bg: #F7F8FC;
+  --surface: #FFFFFF;
+  --surface-2: #F1F3F9;
+  --surface-3: #E9ECF5;
+  --border: #E8EAF2;
+  --border-hover: #D0D5DD;
+  --text: #101828;
+  --text-muted: #667085;
+  --text-subtle: #98A2B3;
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  /* Primary Accent: Default Red */
+  --primary: #E11D26;
+  --primary-hover: #C8101A;
+  --primary-deep: #A80000;
+  --primary-tint: #FDECEC;
+  --primary-ring: rgba(225, 29, 38, 0.25);
+
+  /* Semantic Alerts */
+  --success: #16A34A;
+  --success-tint: #E8F7EE;
+  --warning: #D97706;
+  --warning-tint: #FFF4E0;
+  --danger: #DC2626;
+  --danger-tint: #FDE8E8;
+  --info: #2563EB;
+  --info-tint: #E8F0FE;
+
+  /* Geometry Tokens */
+  --radius-card: 14px;
+  --radius-control: 8px;
+  --radius-pill: 9999px;
+}
+
+/* Dark Workspace Panel (used for SQL workspace & PostgreSQL lab inside light shell) */
+[data-surface="dark-panel"] {
+  --bg: #0B1220;
+  --surface: #0F182B;
+  --surface-2: #142038;
+  --surface-3: #1A2B4C;
+  --border: #1E2A44;
+  --border-hover: #2C3E63;
+  --text: #E6EAF5;
+  --text-muted: #94A0BC;
+  --text-subtle: #627091;
+  --row-selected: #3D1217;
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+}
+
+/* Full-Dark Mode (used for Python workspace and global dark theme toggle) */
+[data-theme="dark"] {
+  --bg: #090D16;
+  --surface: #0F172A;
+  --surface-2: #1E293B;
+  --surface-3: #334155;
+  --border: #1E293B;
+  --border-hover: #334155;
+  --text: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-subtle: #64748B;
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
+
+/* Switchable Accent Colors */
+[data-accent="pink"] {
+  --primary: #EC4899;
+  --primary-hover: #DB2777;
+  --primary-deep: #BE185D;
+  --primary-tint: #FDF2F8;
+  --primary-ring: rgba(236, 72, 153, 0.25);
+}
+[data-accent="orange"] {
+  --primary: #F97316;
+  --primary-hover: #EA580C;
+  --primary-deep: #C2410C;
+  --primary-tint: #FFF7ED;
+  --primary-ring: rgba(249, 115, 22, 0.25);
+}
+[data-accent="yellow"] {
+  --primary: #EAB308;
+  --primary-hover: #CA8A04;
+  --primary-deep: #A16207;
+  --primary-tint: #FEFCE8;
+  --primary-ring: rgba(234, 179, 8, 0.25);
+}
+[data-accent="green"] {
+  --primary: #10B981;
+  --primary-hover: #059669;
+  --primary-deep: #047857;
+  --primary-tint: #ECFDF5;
+  --primary-ring: rgba(16, 185, 129, 0.25);
+}
+[data-accent="blue"] {
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-deep: #1E40AF;
+  --primary-tint: #EFF6FF;
+  --primary-ring: rgba(37, 99, 235, 0.25);
+}
+[data-accent="purple"] {
+  --primary: #8B5CF6;
+  --primary-hover: #7C3AED;
+  --primary-deep: #6D28D9;
+  --primary-tint: #F5F3FF;
+  --primary-ring: rgba(139, 92, 246, 0.25);
+}
+[data-accent="gray"] {
+  --primary: #475569;
+  --primary-hover: #334155;
+  --primary-deep: #1E293B;
+  --primary-tint: #F8FAFC;
+  --primary-ring: rgba(71, 85, 105, 0.25);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 160, 180, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 160, 180, 0.5);
+}
+
+/* Frameless Window Drag Region */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.glass-panel-dark {
+  background: rgba(15, 24, 43, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 42, 68, 0.5);
+}
