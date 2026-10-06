@@ -59,9 +59,9 @@ def handle_tables(cfg):
             try:
                 cur.execute(f"SELECT COUNT(*) FROM \"{tbl_name}\";")
                 cnt = cur.fetchone()[0]
-                tables.append({"name": tbl_name, "count": f"{cnt} rows", "type": r[1]})
+                tables.append({"name": tbl_name, "count": str(cnt), "type": r[1]})
             except Exception:
-                tables.append({"name": tbl_name, "count": "0 rows", "type": r[1]})
+                tables.append({"name": tbl_name, "count": "0", "type": r[1]})
         conn.close()
         return {"success": True, "tables": tables}
     except Exception as e:

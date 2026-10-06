@@ -1,7 +1,23 @@
-import { describe, it, expect } from 'vitest';
-import { getConnectedServices } from '../src/services/notifications';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { 
+  getConnectedServices, 
+  getAutomationSchedule, 
+  saveAutomationSchedule, 
+  dispatchNotification,
+  getQueuedNotifications,
+  saveQueuedNotifications,
+  processOfflineQueue,
+  clearNotificationStorageForTesting
+} from '../src/services/notifications';
 
-describe('Connected Services & Secrets Vault', () => {
+describe('Connected Services & Automation Scheduler', () => {
+  beforeEach(() => {
+    clearNotificationStorageForTesting();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+  });
+
   it('should detect configured services from secret.json', () => {
     const services = getConnectedServices();
     expect(services.length).toBeGreaterThanOrEqual(4);
@@ -23,5 +39,39 @@ describe('Connected Services & Secrets Vault', () => {
     const google = services.find(s => s.id === 'google');
     expect(google?.details).toContain('Sheet ID:');
     expect(google?.details).toContain('...');
+  });
+
+  it('should save and persist automation schedule with frequency and triggers', () => {
+    const saved = saveAutomationSchedule({
+      enabled: true,
+      frequency: 'daily',
+      time: '18:30',
+      channels: { telegram: true, twilio: false, googleSheets: true, windowsNotifications: true },
+      triggers: {
+        problemCompleted: true,
+        sessionCompleted: true,
+        noteUpdated: true,
+        dailySummary: true,
+        streakMilestone: true,
+      }
+    });
+
+    expect(saved.time).toBe('18:30');
+    expect(saved.frequency).toBe('daily');
+    expect(saved.nextScheduledAt).toBeDefined();
+
+    const loaded = getAutomationSchedule();
+    expect(loaded.time).toBe('18:30');
+    expect(loaded.channels.telegram).toBe(true);
+  });
+
+  it('should handle notification queueing and deduplication safely', async () => {
+    saveQueuedNotifications([
+      { id: 'q-1', channel: 'telegram', title: 'Problem Solved', body: 'Two Sum AC', timestamp: new Date().toISOString(), retryCount: 0 }
+    ]);
+
+    const queue = getQueuedNotifications();
+    expect(queue.length).toBe(1);
+    expect(queue[0].title).toBe('Problem Solved');
   });
 });

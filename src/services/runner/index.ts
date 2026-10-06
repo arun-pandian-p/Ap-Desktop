@@ -66,17 +66,18 @@ export interface PostgresQueryResult {
   error?: string;
 }
 
-// Check if running inside Tauri desktop app
-function isTauriEnv(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
+// Check if running inside Electron desktop app
+function isElectronEnv(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.electronAPI);
 }
 
 async function runNodePython(code: string, testCases: any[]): Promise<PythonRunResult | null> {
+  if (typeof window !== 'undefined') return null;
   try {
     const cp = await import(/* @vite-ignore */ 'child_process');
     const path = await import(/* @vite-ignore */ 'path');
     const workerPath = path.resolve(process.cwd(), 'workers/python/worker.py');
-    const res = cp.spawnSync('python', [workerPath], {
+    const res = cp.spawnSync('python', ['-I', '-S', '-B', workerPath], {
       input: JSON.stringify({ code, test_cases: testCases }),
       encoding: 'utf-8',
       timeout: 10000,
@@ -91,6 +92,7 @@ async function runNodePython(code: string, testCases: any[]): Promise<PythonRunR
 }
 
 async function runNodePostgres(action: string, payload: any): Promise<any | null> {
+  if (typeof window !== 'undefined') return null;
   try {
     const cp = await import(/* @vite-ignore */ 'child_process');
     const path = await import(/* @vite-ignore */ 'path');
@@ -114,12 +116,11 @@ async function runNodePostgres(action: string, payload: any): Promise<any | null
 // -------------------------------------------------------------
 
 export async function getPythonInterpreterInfo(): Promise<PythonInterpreterInfo> {
-  if (isTauriEnv()) {
+  if (isElectronEnv() && window.electronAPI) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PythonInterpreterInfo>('python_info');
+      return await window.electronAPI.pythonInfo();
     } catch (e) {
-      console.warn('Tauri python_info failed, falling back to HTTP:', e);
+      console.warn('Electron pythonInfo failed, falling back to HTTP:', e);
     }
   }
 
@@ -162,12 +163,11 @@ export async function executePythonCode(
 ): Promise<PythonRunResult> {
   const startTime = performance.now();
 
-  if (isTauriEnv()) {
+  if (isElectronEnv() && window.electronAPI) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PythonRunResult>('execute_python', { code, testCases });
+      return await window.electronAPI.executePython(code, testCases);
     } catch (e) {
-      console.warn('Tauri execute_python failed, falling back to HTTP:', e);
+      console.warn('Electron executePython failed, falling back to HTTP:', e);
     }
   }
 
@@ -203,7 +203,7 @@ export async function executePythonCode(
       runtime_ms: Math.round(performance.now() - startTime),
       memory_kb: 0,
       stdout: '',
-      stderr: `Execution Bridge Failed: ${err.message}. Ensure Python 3.12 is installed.`,
+      stderr: `Execution Bridge Failed: ${err.message}. Ensure Python is installed.`,
       test_cases_passed: 0,
       total_test_cases: testCases.length,
       test_details: testCases.map(tc => ({ input: tc.input, expected: tc.expected, actual: 'Bridge Failed', passed: false })),
@@ -215,14 +215,48 @@ export async function executePythonCode(
 // 2. SQL Practice Engine (Isolated SQLite per Challenge)
 // -------------------------------------------------------------
 
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 const exerciseDbMap = new Map<string, Database>();
 let sqlInitPromise: Promise<any> | null = null;
 
 async function getSqlModule() {
   if (!sqlInitPromise) {
-    const init = typeof initSqlJs === 'function' ? initSqlJs : (initSqlJs as any)?.default;
-    const isNode = typeof window === 'undefined';
-    sqlInitPromise = init(isNode ? {} : { locateFile: () => '/sql-wasm.wasm' });
+    sqlInitPromise = (async () => {
+      const init = typeof initSqlJs === 'function' ? initSqlJs : (initSqlJs as any)?.default;
+      if (typeof window === 'undefined') {
+        return await init({});
+      }
+
+      // 1. Try locateFile with sqlWasmUrl
+      try {
+        const SQL = await init({
+          locateFile: (file: string) => (file.endsWith('.wasm') ? (sqlWasmUrl || '/sql-wasm.wasm') : file)
+        });
+        if (SQL && SQL.Database) return SQL;
+      } catch {}
+
+      // 2. Try candidate direct URLs
+      const candidateUrls = [
+        sqlWasmUrl,
+        '/sql-wasm.wasm',
+        './sql-wasm.wasm',
+        'sql-wasm.wasm',
+        new URL('/sql-wasm.wasm', window.location.href).href,
+      ].filter(Boolean);
+
+      for (const url of candidateUrls) {
+        try {
+          const resp = await fetch(url);
+          if (resp.ok) {
+            const wasmBinary = await resp.arrayBuffer();
+            const SQL = await init({ wasmBinary });
+            if (SQL && SQL.Database) return SQL;
+          }
+        } catch {}
+      }
+
+      return await init({ locateFile: () => 'sql-wasm.wasm' });
+    })();
   }
   return await sqlInitPromise;
 }
@@ -352,12 +386,11 @@ export async function executeSqlQuery(query: string, exerciseId: string = 'sql-1
 // -------------------------------------------------------------
 
 export async function postgresTestConnection(config: PostgresConfig): Promise<PostgresTestResult> {
-  if (isTauriEnv()) {
+  if (isElectronEnv() && window.electronAPI) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PostgresTestResult>('postgres_test', { config });
+      return await window.electronAPI.postgresTest(config);
     } catch (e) {
-      console.warn('Tauri postgres_test failed, falling back to HTTP:', e);
+      console.warn('Electron postgresTest failed, falling back to HTTP:', e);
     }
   }
 
@@ -383,12 +416,11 @@ export async function postgresTestConnection(config: PostgresConfig): Promise<Po
 }
 
 export async function postgresGetTables(config: PostgresConfig): Promise<{ success: boolean; tables?: PostgresTableInfo[]; error?: string }> {
-  if (isTauriEnv()) {
+  if (isElectronEnv() && window.electronAPI) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<{ success: boolean; tables?: PostgresTableInfo[]; error?: string }>('postgres_tables', { config });
+      return await window.electronAPI.postgresTables(config);
     } catch (e) {
-      console.warn('Tauri postgres_tables failed, falling back to HTTP:', e);
+      console.warn('Electron postgresTables failed, falling back to HTTP:', e);
     }
   }
 
@@ -413,12 +445,11 @@ export async function postgresGetTables(config: PostgresConfig): Promise<{ succe
 }
 
 export async function postgresExecuteQuery(config: PostgresConfig, query: string): Promise<PostgresQueryResult> {
-  if (isTauriEnv()) {
+  if (isElectronEnv() && window.electronAPI) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<PostgresQueryResult>('postgres_query', { config, query });
+      return await window.electronAPI.postgresQuery(config, query);
     } catch (e) {
-      console.warn('Tauri postgres_query failed, falling back to HTTP:', e);
+      console.warn('Electron postgresQuery failed, falling back to HTTP:', e);
     }
   }
 

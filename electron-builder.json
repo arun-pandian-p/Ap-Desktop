@@ -1,0 +1,50 @@
+{
+  "appId": "com.ap.desktop",
+  "productName": "Ap",
+  "copyright": "Copyright © 2026 Ap Team",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "workers",
+      "to": "workers",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "public",
+      "to": "public",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Ap",
+    "artifactName": "Ap-Setup-${version}-${arch}.${ext}",
+    "deleteAppDataOnUninstall": false,
+    "runAfterFinish": true
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Send, 
@@ -13,10 +13,28 @@ import {
   Workflow, 
   ExternalLink,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Settings,
+  Play,
+  Pause,
+  RefreshCw,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import { ScreenId } from '@/types';
-import { getConnectedServices, sendTelegramAlert } from '@/services/notifications';
+import { 
+  getConnectedServices, 
+  sendTelegramAlert, 
+  sendTwilioAlert,
+  sendGoogleSheetsSync,
+  sendWindowsNotification,
+  getAutomationSchedule,
+  saveAutomationSchedule,
+  getQueuedNotifications,
+  processOfflineQueue,
+  AutomationSchedule
+} from '@/services/notifications';
 
 interface ReportsViewProps {
   onNavigate: (screen: ScreenId) => void;
@@ -27,9 +45,60 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   onNavigate,
   onShowToast,
 }) => {
+  const [schedule, setSchedule] = useState<AutomationSchedule>(getAutomationSchedule());
+  const [queuedCount, setQueuedCount] = useState<number>(0);
   const [isSendingTelegram, setIsSendingTelegram] = useState(false);
+  const [isTestingService, setIsTestingService] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null);
+  const [selectedServiceForAutomation, setSelectedServiceForAutomation] = useState<string | null>(null);
+
   const connectedServices = getConnectedServices();
+
+  useEffect(() => {
+    const s = getAutomationSchedule();
+    setSchedule(s);
+    setQueuedCount(getQueuedNotifications().length);
+  }, []);
+
+  const handleToggleScheduleActive = () => {
+    const updated = saveAutomationSchedule({ enabled: !schedule.enabled });
+    setSchedule(updated);
+    onShowToast(updated.enabled ? 'Automation Scheduler activated.' : 'Automation Scheduler paused.', 'success');
+  };
+
+  const handleSaveSchedule = () => {
+    const updated = saveAutomationSchedule(schedule);
+    setSchedule(updated);
+    onShowToast('Schedule and trigger configurations saved successfully.', 'success');
+  };
+
+  const handleTestService = async (serviceId: string) => {
+    setIsTestingService(serviceId);
+    try {
+      let res: { success: boolean; message: string };
+      if (serviceId === 'telegram') {
+        res = await sendTelegramAlert('🎯 [Test Send] Ap Automation alert: Telegram Bot connection verified!');
+      } else if (serviceId === 'twilio') {
+        res = await sendTwilioAlert('🎯 [Test Send] Ap Automation SMS: Twilio connection verified!');
+      } else if (serviceId === 'google') {
+        res = await sendGoogleSheetsSync('Solved: Two Sum, Valid Anagram');
+      } else if (serviceId === 'local') {
+        res = await sendWindowsNotification('Ap Automation Alert', 'Windows desktop notification connection verified!');
+      } else {
+        res = { success: true, message: 'Service test completed.' };
+      }
+
+      if (res.success) {
+        onShowToast(res.message, 'success');
+      } else {
+        onShowToast(res.message, 'error');
+      }
+    } catch (e: any) {
+      onShowToast(`Test failed: ${e.message}`, 'error');
+    } finally {
+      setIsTestingService(null);
+    }
+  };
 
   const handleTestTelegram = async () => {
     setIsSendingTelegram(true);
@@ -43,6 +112,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       setTelegramStatus(`Error: ${res.message}`);
       onShowToast(`Failed to dispatch alert: ${res.message}`, 'error');
     }
+  };
+
+  const handleDrainQueue = async () => {
+    const res = await processOfflineQueue();
+    setQueuedCount(getQueuedNotifications().length);
+    onShowToast(`Processed ${res.processed} queued notifications (${res.failed} remaining/failed).`, 'success');
   };
 
   const handleExportCSV = () => {
@@ -62,16 +137,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Reports & Connected Services</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Reports & Automation Services</h1>
           <p className="text-xs text-gray-500 mt-1">
-            Automated study digests, CSV exports, and external messaging channels
+            Automated study digests, multi-channel schedules, and offline-resilient notification queues
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-[#E8EAF2] rounded-xl text-xs font-semibold shadow-2xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-[#E8EAF2] rounded-xl text-xs font-semibold shadow-2xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -79,7 +154,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <button
             onClick={handleTestTelegram}
             disabled={isSendingTelegram}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
             <span>{isSendingTelegram ? 'Dispatching...' : 'Send Telegram Alert'}</span>
@@ -122,13 +197,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: Connected Services & Reports Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Connected Services (from secret.json) (2 cols) */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-[#E8EAF2] shadow-2xs space-y-4">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900">Configured External Services</h3>
-            <p className="text-xs text-gray-500">Protected credentials loaded securely from local vault</p>
+      {/* Main Grid: Connected Services & Automation Scheduler */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Connected Services (7 cols) */}
+        <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-[#E8EAF2] shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Configured External Services</h3>
+              <p className="text-xs text-gray-500">Protected credentials loaded securely from local vault</p>
+            </div>
+            <span className="text-[11px] font-mono text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+              Auto-Sync Online
+            </span>
           </div>
 
           <div className="space-y-3">
@@ -160,42 +240,197 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </div>
                 </div>
 
-                {svc.id === 'telegram' && (
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
-                    onClick={handleTestTelegram}
-                    disabled={isSendingTelegram}
-                    className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 rounded-lg text-xs font-semibold shadow-2xs transition-all shrink-0 active:scale-95"
+                    onClick={() => handleTestService(svc.id)}
+                    disabled={isTestingService === svc.id}
+                    className="px-2.5 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 rounded-lg text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    Test Send
+                    {isTestingService === svc.id ? 'Sending...' : 'Test Send'}
                   </button>
-                )}
+                  <button
+                    onClick={() => setSelectedServiceForAutomation(svc.id)}
+                    className="px-2.5 py-1.5 bg-[#E11D26]/10 hover:bg-[#E11D26]/20 text-[#E11D26] border border-[#E11D26]/20 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Schedule
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Right Rail: Reminder Settings */}
-        <div className="space-y-6">
+        {/* Right Rail: Complete Automation Scheduler (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
           <div className="bg-white p-5 rounded-2xl border border-[#E8EAF2] shadow-2xs space-y-4">
-            <h3 className="text-sm font-bold text-gray-900">Notification Schedule</h3>
-            <p className="text-xs text-gray-500">Configure automated delivery intervals</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#E11D26]" />
+                  <span>Automation Scheduler</span>
+                </h3>
+                <p className="text-xs text-gray-500">Recurring delivery & offline auto-queue</p>
+              </div>
 
-            <div className="space-y-3 text-xs">
-              {[
-                { title: 'Daily Study Kickoff (9:00 AM)', active: true },
-                { title: 'Daily Review Evening Prompt (8:00 PM)', active: true },
-                { title: 'Weekly Performance Digest (Sunday)', active: true },
-                { title: 'Long Inactivity Idle Alert', active: false },
-              ].map((rem, i) => (
-                <label key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer">
-                  <span className="font-semibold text-gray-800">{rem.title}</span>
+              <button
+                onClick={handleToggleScheduleActive}
+                className={`px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  schedule.enabled ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                {schedule.enabled ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3" />}
+                <span>{schedule.enabled ? 'Active' : 'Paused'}</span>
+              </button>
+            </div>
+
+            {/* Schedule Frequency & Time Settings */}
+            <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-gray-700">Frequency:</span>
+                <select
+                  value={schedule.frequency}
+                  onChange={(e) => setSchedule({ ...schedule, frequency: e.target.value as any })}
+                  className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 font-semibold text-gray-700 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly (Sunday)</option>
+                  <option value="custom">Custom Schedule</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-gray-700">Delivery Time:</span>
+                <input
+                  type="time"
+                  value={schedule.time}
+                  onChange={(e) => setSchedule({ ...schedule, time: e.target.value })}
+                  className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 font-mono text-gray-700 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] text-gray-500">
+                <span>Next Run:</span>
+                <span className="font-mono font-semibold text-gray-700">
+                  {schedule.time} ({schedule.frequency.toUpperCase()})
+                </span>
+              </div>
+            </div>
+
+            {/* Channels Enabled */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-gray-800">Delivery Channels:</span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <label className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 cursor-pointer">
                   <input
                     type="checkbox"
-                    defaultChecked={rem.active}
-                    className="w-4 h-4 rounded text-[#E11D26] focus:ring-red-500 border-gray-300"
+                    checked={schedule.channels.telegram}
+                    onChange={(e) => setSchedule({
+                      ...schedule,
+                      channels: { ...schedule.channels, telegram: e.target.checked }
+                    })}
+                    className="w-3.5 h-3.5 rounded text-[#E11D26]"
                   />
+                  <span>Telegram Bot</span>
                 </label>
-              ))}
+
+                <label className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={schedule.channels.twilio}
+                    onChange={(e) => setSchedule({
+                      ...schedule,
+                      channels: { ...schedule.channels, twilio: e.target.checked }
+                    })}
+                    className="w-3.5 h-3.5 rounded text-[#E11D26]"
+                  />
+                  <span>Twilio SMS</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={schedule.channels.googleSheets}
+                    onChange={(e) => setSchedule({
+                      ...schedule,
+                      channels: { ...schedule.channels, googleSheets: e.target.checked }
+                    })}
+                    className="w-3.5 h-3.5 rounded text-[#E11D26]"
+                  />
+                  <span>Google Sheets</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={schedule.channels.windowsNotifications}
+                    onChange={(e) => setSchedule({
+                      ...schedule,
+                      channels: { ...schedule.channels, windowsNotifications: e.target.checked }
+                    })}
+                    className="w-3.5 h-3.5 rounded text-[#E11D26]"
+                  />
+                  <span>Windows Toast</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Event Triggers */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-gray-800">Event Triggers:</span>
+              <div className="space-y-1.5 text-xs">
+                {[
+                  { key: 'problemCompleted', label: 'Completed coding problems' },
+                  { key: 'sessionCompleted', label: 'Completed practice sessions' },
+                  { key: 'noteUpdated', label: 'Notes added/updated' },
+                  { key: 'dailySummary', label: 'Daily study summary' },
+                  { key: 'streakMilestone', label: 'Streak/milestone alerts' },
+                ].map((trig) => (
+                  <label key={trig.key} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100/50">
+                    <span className="text-gray-700 font-medium">{trig.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={(schedule.triggers as any)[trig.key]}
+                      onChange={(e) => setSchedule({
+                        ...schedule,
+                        triggers: { ...schedule.triggers, [trig.key]: e.target.checked }
+                      })}
+                      className="w-3.5 h-3.5 rounded text-[#E11D26]"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Offline Queue Bar */}
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/60 flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
+                <span>Offline Queue: <strong>{queuedCount} pending</strong></span>
+              </div>
+              {queuedCount > 0 && (
+                <button
+                  onClick={handleDrainQueue}
+                  className="px-2 py-0.5 bg-amber-600 text-white rounded text-[11px] font-bold cursor-pointer hover:bg-amber-700"
+                >
+                  Sync Now
+                </button>
+              )}
+            </div>
+
+            {/* Save Controls */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <span className="text-[11px] text-gray-400">
+                {schedule.lastDeliveryStatus === 'success' && '✓ Last sent delivered'}
+                {schedule.lastDeliveryStatus === 'queued' && '⏳ Queued offline'}
+                {!schedule.lastDeliveryStatus && 'Ready for auto-delivery'}
+              </span>
+
+              <button
+                onClick={handleSaveSchedule}
+                className="px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                Save Schedule
+              </button>
             </div>
           </div>
         </div>

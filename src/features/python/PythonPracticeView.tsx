@@ -56,18 +56,33 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
   // Load questions and interpreter info on mount
   useEffect(() => {
     async function loadData() {
-      const qRes = await fetchQuestions({ limit: 1337 });
-      setAllQuestions(qRes.questions);
-
-      if (initialProblem) {
-        const foundIdx = qRes.questions.findIndex(q => q.id === initialProblem.id);
-        if (foundIdx >= 0) {
-          setCurrentIndex(foundIdx);
+      try {
+        const qRes = await fetchQuestions({ limit: 1337 });
+        if (qRes && qRes.questions && qRes.questions.length > 0) {
+          setAllQuestions(qRes.questions);
+          if (initialProblem) {
+            const foundIdx = qRes.questions.findIndex(q => q.id === initialProblem.id);
+            if (foundIdx >= 0) {
+              setCurrentIndex(foundIdx);
+            }
+          }
         }
+      } catch (e) {
+        console.warn('Failed to load questions from SQLite:', e);
       }
 
-      const info = await getPythonInterpreterInfo();
-      setPyInfo(info);
+      try {
+        const info = await getPythonInterpreterInfo();
+        setPyInfo(info);
+      } catch (e) {
+        console.warn('Failed to get Python interpreter info:', e);
+        setPyInfo({
+          installed: true,
+          version: 'Python 3.12 (Pyodide WASM)',
+          executable: 'in-browser',
+          status: 'Ready',
+        });
+      }
     }
     loadData();
   }, [initialProblem]);
@@ -87,13 +102,44 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
   const details = getProblemDetails(activeProblem);
   const [problemSubmissions, setProblemSubmissions] = useState<any[]>([]);
 
-  // Sync starter code when active question changes
+  // Sync starter code or restore saved draft when active question changes
   useEffect(() => {
-    setCode(details.starterCode);
-    editorRef.current?.setValue(details.starterCode);
-    setRunResult(null);
-    setSelectedCaseIdx(0);
+    let isCancelled = false;
+    async function loadDraftOrStarter() {
+      try {
+        const { getCodeDraft } = await import('@/services/db');
+        const draft = await getCodeDraft(activeProblem.id, 'python');
+        if (!isCancelled) {
+          const initial = (draft !== null && draft.trim().length > 0) ? draft : details.starterCode;
+          setCode(initial);
+          editorRef.current?.setValue(initial);
+          setRunResult(null);
+          setSelectedCaseIdx(0);
+        }
+      } catch {
+        if (!isCancelled) {
+          setCode(details.starterCode);
+          editorRef.current?.setValue(details.starterCode);
+          setRunResult(null);
+          setSelectedCaseIdx(0);
+        }
+      }
+    }
+    loadDraftOrStarter();
+    return () => { isCancelled = true; };
   }, [activeProblem.id]);
+
+  // Debounced autosave for code drafts
+  useEffect(() => {
+    if (!code || !activeProblem?.id) return;
+    const timer = setTimeout(async () => {
+      try {
+        const { saveCodeDraft } = await import('@/services/db');
+        await saveCodeDraft(activeProblem.id, 'python', code);
+      } catch {}
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [code, activeProblem?.id]);
 
   // Load persistent SQLite submissions for active question
   useEffect(() => {

@@ -31,7 +31,10 @@ export const App: React.FC = () => {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     return sessionStorage.getItem('ap_unlocked') === 'true';
   });
-  const [accentColor, setAccentColor] = useState<AccentColor>('red');
+  const [accentColor, setAccentColor] = useState<AccentColor>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ap_accent_color') : null;
+    return (saved && ['red', 'pink', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'].includes(saved)) ? (saved as AccentColor) : 'red';
+  });
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ap_theme_mode') : null;
     return (saved === 'dark' || saved === 'light' || saved === 'system') ? (saved as ThemeMode) : 'light';
@@ -111,6 +114,12 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   }, [themeMode]);
 
+  // Sync accent color with DOM and localStorage
+  useEffect(() => {
+    localStorage.setItem('ap_accent_color', accentColor);
+    document.documentElement.setAttribute('data-accent', accentColor);
+  }, [accentColor]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -165,6 +174,8 @@ export const App: React.FC = () => {
         studyHours={`${stats.activeStudyHours}h`}
         onNavigate={setCurrentScreen}
         onLock={handleLock}
+        themeMode={themeMode}
+        onToggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
       />
 
       {/* 2. Middle Body: Sidebar + Active Screen */}

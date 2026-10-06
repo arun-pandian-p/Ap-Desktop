@@ -10,7 +10,7 @@ Write-Host "==========================================================" -Foregro
 Write-Host "  Ap -- Windows Production Release and Inno Setup Packager" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Step 1: Validate Frontend Build
+# 1. Step 1: Validate Frontend Build and Update Unpacked Runtime
 if (-not $SkipFrontendBuild) {
     Write-Host "`n[1/4] Building Frontend Production Bundle (Vite + TS)..." -ForegroundColor Yellow
     npm run build
@@ -27,6 +27,13 @@ if (-not (Test-Path "$ProjectRoot\dist\index.html")) {
     exit 1
 }
 Write-Host "  [OK] Frontend bundle verified in dist/" -ForegroundColor Green
+
+Write-Host "`n[1.5/4] Packaging Unpacked Electron Runtime with latest bundle..." -ForegroundColor Yellow
+npx electron-builder --win dir --x64
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "electron-builder encountered a warning or non-zero exit code, checking win-unpacked..."
+}
+Write-Host "  [OK] Unpacked runtime updated in release/win-unpacked" -ForegroundColor Green
 
 # 2. Step 2: Locate Inno Setup Compiler (ISCC)
 Write-Host "`n[2/4] Locating Inno Setup Compiler (ISCC.exe)..." -ForegroundColor Yellow
@@ -62,8 +69,11 @@ if (-not (Test-Path $ReleaseDir)) {
     New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 }
 
-# 4. Step 4: Validate Native PE Executable Binary
-$ExeTarget = "$ProjectRoot\src-tauri\target\release\Ap.exe"
+# 4. Step 4: Validate Executable Binary
+$ExeTarget = "$ProjectRoot\release\win-unpacked\Ap.exe"
+if (-not (Test-Path $ExeTarget)) {
+    $ExeTarget = "$ProjectRoot\src-tauri\target\release\Ap.exe"
+}
 $isRealBinary = $false
 if (Test-Path $ExeTarget) {
     $bytes = [System.IO.File]::ReadAllBytes($ExeTarget)

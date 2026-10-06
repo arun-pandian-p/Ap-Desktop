@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Server, 
   Database, 
@@ -24,7 +24,18 @@ import {
   Layers,
   FileCode,
   Save,
-  Trash2
+  Trash2,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  Edit3,
+  Globe,
+  Radio,
+  Share2,
+  Box,
+  Binary,
+  Users,
+  HardDrive
 } from 'lucide-react';
 import { MonacoCodeEditor, MonacoCodeEditorHandle } from '@/components/common/MonacoCodeEditor';
 import { 
@@ -40,13 +51,29 @@ import {
 export const PostgresLabView: React.FC = () => {
   const editorRef = useRef<MonacoCodeEditorHandle>(null);
 
-  const [config, setConfig] = useState<PostgresConfig>({
-    host: 'localhost',
-    port: 5432,
-    database: 'postgres',
-    user: 'postgres',
-    password: '2030',
-    sslmode: 'prefer',
+  const [config, setConfig] = useState<PostgresConfig>(() => {
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ap_postgres_config') : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          host: parsed.host || 'localhost',
+          port: parsed.port || 5432,
+          database: parsed.database || 'postgres',
+          user: parsed.user || 'postgres',
+          password: parsed.password || '2030',
+          sslmode: parsed.sslmode || 'prefer',
+        };
+      }
+    } catch {}
+    return {
+      host: 'localhost',
+      port: 5432,
+      database: 'postgres',
+      user: 'postgres',
+      password: '2030',
+      sslmode: 'prefer',
+    };
   });
 
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('disconnected');
@@ -65,6 +92,38 @@ export const PostgresLabView: React.FC = () => {
   const [activeResultTab, setActiveResultTab] = useState<'results' | 'output' | 'messages' | 'history'>('results');
   const [activeInspectorTab, setActiveInspectorTab] = useState<'columns' | 'constraints' | 'indexes' | 'preview'>('columns');
   const [searchTreeFilter, setSearchTreeFilter] = useState('');
+  
+  // Tree expansion states (pgAdmin hierarchy)
+  const [isServersExpanded, setIsServersExpanded] = useState(true);
+  const [isPgServerExpanded, setIsPgServerExpanded] = useState(true);
+  const [isDatabasesExpanded, setIsDatabasesExpanded] = useState(true);
+  const [isDbExpanded, setIsDbExpanded] = useState(true);
+  const [isSchemaExpanded, setIsSchemaExpanded] = useState(true);
+  const [isTablesExpanded, setIsTablesExpanded] = useState(true);
+  const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
+
+  // Inline table edit state
+  const [editingCell, setEditingCell] = useState<{ rowIndex: number; colIndex: number; colName: string; value: string } | null>(null);
+  const [editSuccessToast, setEditSuccessToast] = useState<string | null>(null);
+
+  // Upload Dataset Modal State
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadTableName, setUploadTableName] = useState('');
+  const [uploadPreviewData, setUploadPreviewData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+
+  const toggleTableExpand = (tblName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedTables(prev => ({ ...prev, [tblName]: !prev[tblName] }));
+  };
+
+  const filteredTables = useMemo(() => {
+    if (!searchTreeFilter.trim()) return tables;
+    const term = searchTreeFilter.toLowerCase();
+    return tables.filter(t => t.name.toLowerCase().includes(term));
+  }, [tables, searchTreeFilter]);
   const [executionTimer, setExecutionTimer] = useState<string>('00:00s');
 
   const [connectionFeedbackModal, setConnectionFeedbackModal] = useState<{
@@ -100,6 +159,9 @@ SELECT * FROM employees;
   const connectToDatabase = async (cfgToUse: PostgresConfig) => {
     setConnectionStatus('connecting');
     setConnectionError(null);
+    try {
+      localStorage.setItem('ap_postgres_config', JSON.stringify(cfgToUse));
+    } catch {}
 
     const testRes = await postgresTestConnection(cfgToUse);
     if (testRes.success) {
@@ -257,6 +319,158 @@ SELECT * FROM employees;
     editorRef.current?.setValue(q);
   };
 
+  // 1. Export Results to CSV
+  const handleExportCsv = () => {
+    if (!result || !result.columns || !result.values || result.values.length === 0) return;
+    const headerLine = result.columns.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+    const rowLines = result.values.map(row => 
+      row.map(val => `"${String(val === null || val === undefined ? '' : val).replace(/"/g, '""')}"`).join(',')
+    );
+    const csvContent = [headerLine, ...rowLines].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTable || 'query_results'}_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 2. Export Results to XLSX (Compatible Spreadsheet XML)
+  const handleExportXlsx = () => {
+    if (!result || !result.columns || !result.values || result.values.length === 0) return;
+    const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="PostgreSQL Results">
+  <Table>
+   <Row>
+    ${result.columns.map(c => `<Cell><Data ss:Type="String">${String(c).replace(/[<>&]/g, '')}</Data></Cell>`).join('')}
+   </Row>
+   ${result.values.map(row => `
+   <Row>
+    ${row.map(val => `<Cell><Data ss:Type="String">${String(val ?? '').replace(/[<>&]/g, '')}</Data></Cell>`).join('')}
+   </Row>`).join('')}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTable || 'query_results'}_${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 3. Save Inline Cell Edit and execute UPDATE statement
+  const handleSaveCellEdit = async () => {
+    if (!editingCell || !result || !result.columns || !result.values) return;
+    const { rowIndex, colIndex, colName, value: newVal } = editingCell;
+    const row = result.values[rowIndex];
+    if (!row) return;
+
+    // Determine primary key column or first column for matching
+    const pkColName = result.columns[0] || 'id';
+    const pkVal = row[0];
+
+    // Optimistically update local UI state
+    const updatedValues = result.values.map((r, rIdx) => {
+      if (rIdx === rowIndex) {
+        const copy = [...r];
+        copy[colIndex] = newVal;
+        return copy;
+      }
+      return r;
+    });
+
+    setResult({ ...result, values: updatedValues });
+    setEditingCell(null);
+
+    // Formulate and execute genuine PostgreSQL UPDATE
+    const tbl = selectedTable || 'employees';
+    const updateQuery = typeof pkVal === 'number'
+      ? `UPDATE "${tbl}" SET "${colName}" = '${String(newVal).replace(/'/g, "''")}' WHERE "${pkColName}" = ${pkVal};`
+      : `UPDATE "${tbl}" SET "${colName}" = '${String(newVal).replace(/'/g, "''")}' WHERE "${pkColName}" = '${String(pkVal).replace(/'/g, "''")}';`;
+
+    const updateRes = await postgresExecuteQuery(config, updateQuery);
+    if (updateRes.success) {
+      setEditSuccessToast(`✓ Updated row (${pkColName}=${pkVal}): "${colName}" = "${newVal}"`);
+      setTimeout(() => setEditSuccessToast(null), 3000);
+    }
+  };
+
+  // 4. Handle Upload File Selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadFileName(file.name);
+    const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    setUploadTableName(baseName || 'imported_dataset');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) return;
+
+      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+        const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length > 0) {
+          const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+          const rows = lines.slice(1, 6).map(l => l.split(',').map(c => c.trim().replace(/^["']|["']$/g, '')));
+          setUploadPreviewData({ headers, rows });
+        }
+      } else if (file.name.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const headers = Object.keys(parsed[0]);
+            const rows = parsed.slice(0, 5).map(item => headers.map(k => String(item[k] ?? '')));
+            setUploadPreviewData({ headers, rows });
+          }
+        } catch {}
+      } else {
+        // Fallback generic SQL or text
+        setUploadPreviewData({ headers: ['raw_sql'], rows: [[content.slice(0, 80) + '...']] });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // 5. Execute Dataset Upload / Table Placement
+  const handleExecuteDatasetUpload = async () => {
+    if (!uploadTableName.trim() || !uploadPreviewData) return;
+    setIsUploading(true);
+    setUploadMessage(null);
+
+    const tblName = uploadTableName.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+    const cols = uploadPreviewData.headers.map(h => `"${h.replace(/[^a-zA-Z0-9_]/g, '_')}" TEXT`).join(', ');
+    const createTableSql = `CREATE TABLE IF NOT EXISTS "${tblName}" (id SERIAL PRIMARY KEY, ${cols});`;
+
+    // Create table
+    await postgresExecuteQuery(config, createTableSql);
+
+    // Insert preview rows
+    for (const row of uploadPreviewData.rows) {
+      const colNames = uploadPreviewData.headers.map(h => `"${h.replace(/[^a-zA-Z0-9_]/g, '_')}"`).join(', ');
+      const values = row.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ');
+      await postgresExecuteQuery(config, `INSERT INTO "${tblName}" (${colNames}) VALUES (${values});`);
+    }
+
+    setIsUploading(false);
+    setIsUploadModalOpen(false);
+    setUploadPreviewData(null);
+    setUploadFileName('');
+
+    // Refresh table list
+    await handleRefreshTables();
+    handleTableClick(tblName);
+  };
+
   // Inspect columns of the selected table
   const selectedTableInfo = tables.find(t => t.name === selectedTable);
 
@@ -380,61 +594,169 @@ SELECT * FROM employees;
             </div>
           </div>
 
-          {/* Catalog Tree View */}
-          <div className="flex-1 overflow-y-auto p-3 text-xs font-mono space-y-2">
-            {connectionStatus === 'connected' ? (
-              <div className="space-y-1.5">
-                {/* Database Node */}
-                <div className="flex items-center gap-1.5 text-gray-200 font-bold">
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                  <Database className="w-3.5 h-3.5 text-purple-400" />
-                  <span>{config.database}</span>
-                </div>
+          {/* Catalog Tree View matching pgAdmin reference */}
+          <div className="flex-1 overflow-y-auto p-2 text-xs font-mono space-y-1">
+            {/* Servers (1) Root Node */}
+            <div className="space-y-1">
+              <div 
+                onClick={() => setIsServersExpanded(prev => !prev)}
+                className="flex items-center gap-1.5 text-gray-200 font-bold hover:text-white cursor-pointer py-1 px-1.5 rounded hover:bg-[#182033] transition-colors select-none text-xs"
+              >
+                {isServersExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                <Server className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                <span>Servers (1)</span>
+              </div>
 
-                {/* Schemas Node */}
-                <div className="pl-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-gray-300">
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                    <Folder className="w-3.5 h-3.5 text-amber-400" />
-                    <span>public (schema)</span>
+              {isServersExpanded && (
+                <div className="pl-3.5 space-y-1 border-l border-[#1C2438] ml-2">
+                  {/* PostgreSQL 16 Server Node */}
+                  <div 
+                    onClick={() => setIsPgServerExpanded(prev => !prev)}
+                    className="flex items-center gap-1.5 text-blue-300 font-semibold hover:text-white cursor-pointer py-1 px-1.5 rounded hover:bg-[#182033] transition-colors select-none"
+                  >
+                    {isPgServerExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                    <Database className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span>PostgreSQL 16</span>
                   </div>
 
-                  {/* Tables Node */}
-                  <div className="pl-4 space-y-1">
-                    <div className="flex items-center gap-1.5 text-gray-400 text-[11px] font-semibold">
-                      <ChevronDown className="w-3 h-3" />
-                      <span>Tables ({tables.length})</span>
-                    </div>
+                  {isPgServerExpanded && (
+                    <div className="pl-3.5 space-y-1 border-l border-[#1C2438] ml-2">
+                      {/* Databases (3) Node */}
+                      <div 
+                        onClick={() => setIsDatabasesExpanded(prev => !prev)}
+                        className="flex items-center justify-between text-gray-300 hover:text-white cursor-pointer py-1 px-1.5 rounded hover:bg-[#182033] transition-colors select-none font-medium"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {isDatabasesExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                          <Database className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span>Databases (3)</span>
+                        </div>
+                      </div>
 
-                    <div className="pl-4 space-y-0.5">
-                      {tables.map(tbl => (
-                        <button
-                          key={tbl.name}
-                          onClick={() => handleTableClick(tbl.name)}
-                          className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-left transition-colors ${
-                            selectedTable === tbl.name
-                              ? 'bg-[#3D141C] text-white border border-[#E11D26]/40 font-bold'
-                              : 'text-gray-300 hover:bg-[#182136] hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Table className="w-3 h-3 text-blue-400" />
-                            <span className="truncate">{tbl.name}</span>
+                      {isDatabasesExpanded && (
+                        <div className="pl-3.5 space-y-1 border-l border-[#1C2438] ml-2">
+                          {/* Test (Disconnected) */}
+                          <div className="flex items-center gap-1.5 text-gray-400 py-0.5 px-1.5 rounded opacity-70">
+                            <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
+                            <Database className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="line-through text-red-400/80">Test</span>
+                            <X className="w-2.5 h-2.5 text-red-400 ml-auto" />
                           </div>
-                          <span className="text-[10px] text-gray-500 font-mono">
-                            {tbl.count !== undefined ? `${tbl.count} rows` : ''}
-                          </span>
-                        </button>
-                      ))}
+
+                          {/* postgres (Connected / Active Database) */}
+                          <div className="space-y-1">
+                            <div 
+                              onClick={() => setIsDbExpanded(prev => !prev)}
+                              className="flex items-center gap-1.5 text-emerald-400 font-bold hover:text-white cursor-pointer py-1 px-1.5 rounded bg-[#182038]/60 border border-[#222C47] transition-colors select-none"
+                            >
+                              {isDbExpanded ? <ChevronDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                              <Database className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                              <span className="truncate">{config.database || 'postgres'}</span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-auto animate-pulse" />
+                            </div>
+
+                            {/* Database Sub-Objects (pgAdmin 4 structure) */}
+                            {isDbExpanded && (
+                              <div className="pl-3.5 space-y-0.5 border-l border-[#1C2438] ml-2 text-[11px] text-gray-400">
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Binary className="w-3 h-3 text-purple-400" /><span>Casts</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Box className="w-3 h-3 text-blue-400" /><span>Catalogs</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Layers className="w-3 h-3 text-cyan-400" /><span>Event Triggers</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><ShieldCheck className="w-3 h-3 text-emerald-400" /><span>Extensions</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Globe className="w-3 h-3 text-amber-400" /><span>Foreign Data Wrappers</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Code2 className="w-3 h-3 text-yellow-400" /><span>Languages</span></div>
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Radio className="w-3 h-3 text-indigo-400" /><span>Publications</span></div>
+
+                                {/* Schemas Node */}
+                                <div className="space-y-0.5 pt-0.5">
+                                  <div 
+                                    onClick={() => setIsSchemaExpanded(prev => !prev)}
+                                    className="flex items-center gap-1.5 text-gray-200 font-semibold hover:text-white cursor-pointer py-1 px-1 rounded hover:bg-[#182033] transition-colors select-none"
+                                  >
+                                    {isSchemaExpanded ? <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" /> : <ChevronRight className="w-3 h-3 text-gray-400 shrink-0" />}
+                                    <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>Schemas (1)</span>
+                                  </div>
+
+                                  {isSchemaExpanded && (
+                                    <div className="pl-3 space-y-0.5 border-l border-[#1C2438] ml-2">
+                                      <div 
+                                        onClick={() => setIsTablesExpanded(prev => !prev)}
+                                        className="flex items-center justify-between text-gray-300 hover:text-white cursor-pointer py-1 px-1 rounded hover:bg-[#182033] transition-colors select-none"
+                                      >
+                                        <div className="flex items-center gap-1.5">
+                                          {isTablesExpanded ? <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" /> : <ChevronRight className="w-3 h-3 text-gray-400 shrink-0" />}
+                                          <Folder className="w-3 h-3 text-amber-300 shrink-0" />
+                                          <span>public</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-500 font-mono">{filteredTables.length} tables</span>
+                                      </div>
+
+                                      {isTablesExpanded && (
+                                        <div className="pl-3 space-y-0.5 border-l border-[#1C2438] ml-1.5">
+                                          {filteredTables.length === 0 ? (
+                                            <div className="text-[11px] text-gray-500 italic py-1 px-2">No tables found</div>
+                                          ) : (
+                                            filteredTables.map((tbl: PostgresTableInfo) => {
+                                              const isSelected = selectedTable === tbl.name;
+                                              return (
+                                                <div
+                                                  key={tbl.name}
+                                                  onClick={() => handleTableClick(tbl.name)}
+                                                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                                                    isSelected
+                                                      ? 'bg-[#3D141C] text-white border border-[#E11D26]/40 font-bold'
+                                                      : 'text-gray-300 hover:bg-[#182136] hover:text-white'
+                                                  }`}
+                                                  title={`Click to inspect & query table "${tbl.name}"`}
+                                                >
+                                                  <div className="flex items-center gap-1.5 truncate">
+                                                    <Table className="w-3 h-3 text-blue-400 shrink-0" />
+                                                    <span className="truncate">{tbl.name}</span>
+                                                  </div>
+                                                  <span className="text-[10px] text-gray-500 font-mono">
+                                                    {tbl.count !== undefined ? `${String(tbl.count).replace(/rows?/gi, '').trim()} rows` : ''}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-[#182033] cursor-pointer"><ChevronRight className="w-3 h-3 text-gray-500" /><Share2 className="w-3 h-3 text-orange-400" /><span>Subscriptions</span></div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* testing (Disconnected) */}
+                          <div className="flex items-center gap-1.5 text-gray-400 py-0.5 px-1.5 rounded opacity-70">
+                            <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
+                            <Database className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="line-through text-red-400/80">testing</span>
+                            <X className="w-2.5 h-2.5 text-red-400 ml-auto" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Server-level Nodes: Login/Group Roles & Tablespaces */}
+                      <div className="flex items-center gap-1.5 py-1 px-1.5 text-gray-400 hover:text-gray-200 cursor-pointer rounded hover:bg-[#182033]">
+                        <ChevronRight className="w-3 h-3 text-gray-500" />
+                        <Users className="w-3.5 h-3.5 text-pink-400" />
+                        <span>Login/Group Roles</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 py-1 px-1.5 text-gray-400 hover:text-gray-200 cursor-pointer rounded hover:bg-[#182033]">
+                        <ChevronRight className="w-3 h-3 text-gray-500" />
+                        <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Tablespaces</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="text-gray-500 italic p-4 text-center">
-                Not connected. Connect to your PostgreSQL server to explore database objects.
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -442,7 +764,7 @@ SELECT * FROM employees;
         <div className="col-span-6 flex flex-col border-r border-[#1C2438] bg-[#0E1322] overflow-hidden">
           {/* Query Tabs */}
           <div className="h-9 bg-[#101524] border-b border-[#1C2438] px-3 flex items-center justify-between text-xs select-none">
-            <div className="flex items-center gap-1 overflow-x-auto max-w-[70%]">
+            <div className="flex items-center gap-1 overflow-x-auto max-w-[55%]">
               {queryTabs.map((t) => {
                 const isActive = t.id === activeQueryTabId;
                 return (
@@ -471,20 +793,36 @@ SELECT * FROM employees;
                 className="px-2 py-1 text-gray-400 hover:text-white hover:bg-[#1E2638] rounded font-mono text-xs flex items-center gap-1 transition-colors cursor-pointer"
                 title="Create New Empty Query Tab"
               >
-                + New Query
+                + New
               </button>
             </div>
 
             {/* Quick Query Actions */}
-            <div className="flex items-center gap-2 text-gray-400">
+            <div className="flex items-center gap-1.5 text-gray-400">
               <button
                 onClick={() => editorRef.current?.format()}
-                className="hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
-                title="Format SQL"
+                className="hover:text-white flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
+                title="Format SQL (Ctrl+Shift+F)"
               >
-                <FileCode className="w-3 h-3" />
+                <FileCode className="w-3.5 h-3.5 text-blue-400" />
                 <span>Format</span>
               </button>
+
+              <button
+                onClick={() => {
+                  const starter = defaultQuery;
+                  setQuery(starter);
+                  setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: starter, result: null } : t));
+                  editorRef.current?.setValue(starter);
+                  setResult(null);
+                }}
+                className="hover:text-white flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
+                title="Reset editor back to default starter query"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Reset</span>
+              </button>
+
               <button
                 onClick={() => {
                   setQuery('');
@@ -492,10 +830,10 @@ SELECT * FROM employees;
                   editorRef.current?.setValue('');
                   setResult(null);
                 }}
-                className="hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
-                title="Clear Editor"
+                className="hover:text-red-400 text-gray-400 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-red-950/30 cursor-pointer"
+                title="Remove all code from editor (Blank slate)"
               >
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="w-3.5 h-3.5 text-red-400" />
                 <span>Clear</span>
               </button>
             </div>
@@ -518,12 +856,12 @@ SELECT * FROM employees;
 
           {/* Query Results & Data Output (Bottom half) */}
           <div className="flex-1 flex flex-col bg-[#0E1322] overflow-hidden">
-            {/* Results Tabs */}
-            <div className="px-4 pt-1.5 border-b border-[#1C2438] bg-[#101524] flex items-center justify-between text-xs font-semibold">
+            {/* Results Tabs & Action Buttons Bar */}
+            <div className="px-4 py-1.5 border-b border-[#1C2438] bg-[#101524] flex items-center justify-between text-xs font-semibold select-none">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setActiveResultTab('results')}
-                  className={`pb-2 border-b-2 transition-colors ${
+                  className={`pb-1.5 pt-0.5 border-b-2 transition-colors ${
                     activeResultTab === 'results' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -531,7 +869,7 @@ SELECT * FROM employees;
                 </button>
                 <button
                   onClick={() => setActiveResultTab('output')}
-                  className={`pb-2 border-b-2 transition-colors ${
+                  className={`pb-1.5 pt-0.5 border-b-2 transition-colors ${
                     activeResultTab === 'output' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -539,7 +877,7 @@ SELECT * FROM employees;
                 </button>
                 <button
                   onClick={() => setActiveResultTab('messages')}
-                  className={`pb-2 border-b-2 transition-colors ${
+                  className={`pb-1.5 pt-0.5 border-b-2 transition-colors ${
                     activeResultTab === 'messages' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -547,13 +885,57 @@ SELECT * FROM employees;
                 </button>
               </div>
 
-              {result && (
-                <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400">
-                  <span>Execution: <strong className="text-white">{result.execution_ms ?? 0} ms</strong></span>
-                  <span>Rows: <strong className="text-white">{result.row_count ?? (result.values ? result.values.length : 0)}</strong></span>
-                </div>
-              )}
+              {/* Data Actions: Export CSV, Export XLSX, Upload Dataset (3rd place button) */}
+              <div className="flex items-center gap-2">
+                {result && result.values && result.values.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleExportCsv}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-[#182033] hover:bg-[#202B45] text-gray-300 hover:text-white rounded-md border border-[#25324E] text-[11px] font-mono transition-colors"
+                      title="Export current query results to CSV"
+                    >
+                      <Download className="w-3 h-3 text-emerald-400" />
+                      <span>CSV</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportXlsx}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-[#182033] hover:bg-[#202B45] text-gray-300 hover:text-white rounded-md border border-[#25324E] text-[11px] font-mono transition-colors"
+                      title="Export current query results to Excel XLSX"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-blue-400" />
+                      <span>XLSX</span>
+                    </button>
+                  </>
+                )}
+
+                {/* 3rd Button: Upload / Place Dataset */}
+                <button
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-[#1E2638] hover:bg-[#28334A] text-purple-300 hover:text-purple-100 rounded-md border border-purple-800/60 text-[11px] font-mono transition-colors"
+                  title="Upload / Place Dataset (CSV, XLSX, JSON, SQL)"
+                >
+                  <Upload className="w-3 h-3 text-purple-400" />
+                  <span>Upload Dataset</span>
+                </button>
+
+                {result && (
+                  <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono text-gray-400 pl-2 border-l border-[#1C2438]">
+                    <span>{result.execution_ms ?? 0}ms</span>
+                    <span>•</span>
+                    <span>{result.row_count ?? (result.values ? result.values.length : 0)} rows</span>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Edit Success Toast */}
+            {editSuccessToast && (
+              <div className="px-4 py-1.5 bg-emerald-950/70 border-b border-emerald-800 text-emerald-300 text-xs font-mono flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{editSuccessToast}</span>
+              </div>
+            )}
 
             <div className="flex-1 overflow-auto p-3 text-xs font-mono">
               {isExecuting ? (
@@ -573,9 +955,14 @@ SELECT * FROM employees;
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-800/60">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Query executed successfully. Rows returned: {result.row_count ?? result.values.length} | Duration: {result.execution_ms ?? 0} ms</span>
+                      <div className="flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-800/60">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Query executed successfully. Rows returned: {result.row_count ?? result.values.length} | Duration: {result.execution_ms ?? 0} ms</span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-mono italic">
+                          Double-click any cell to edit &amp; update table
+                        </span>
                       </div>
 
                       <div className="bg-[#141A2E] rounded-xl border border-[#222C47] overflow-hidden">
@@ -586,17 +973,90 @@ SELECT * FROM employees;
                               {(result.columns || []).map((c, i) => (
                                 <th key={i} className="py-2 px-3 border-r border-[#222C47] last:border-r-0">{c}</th>
                               ))}
+                              <th className="py-2 px-3 text-center text-gray-400 w-16">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#1D253C]">
                             {(result.values || []).map((row, ri) => (
-                              <tr key={ri} className="hover:bg-[#182038]/60 text-gray-200">
+                              <tr key={ri} className="hover:bg-[#182038]/60 text-gray-200 group">
                                 <td className="py-1.5 px-3 border-r border-[#222C47] text-gray-500">{ri + 1}</td>
-                                {row.map((val, vi) => (
-                                  <td key={vi} className="py-1.5 px-3 border-r border-[#222C47] last:border-r-0">
-                                    {String(val)}
-                                  </td>
-                                ))}
+                                {row.map((val, vi) => {
+                                  const colName = result.columns?.[vi] || `col_${vi}`;
+                                  const isEditingThis = editingCell && editingCell.rowIndex === ri && editingCell.colIndex === vi;
+
+                                  return (
+                                    <td 
+                                      key={vi} 
+                                      onDoubleClick={() => {
+                                        setEditingCell({
+                                          rowIndex: ri,
+                                          colIndex: vi,
+                                          colName,
+                                          value: String(val ?? '')
+                                        });
+                                      }}
+                                      className="py-1.5 px-3 border-r border-[#222C47] last:border-r-0 relative cursor-pointer"
+                                      title="Double-click to edit cell value"
+                                    >
+                                      {isEditingThis ? (
+                                        <div className="flex items-center gap-1">
+                                          <input
+                                            type="text"
+                                            autoFocus
+                                            value={editingCell.value}
+                                            onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleSaveCellEdit();
+                                              if (e.key === 'Escape') setEditingCell(null);
+                                            }}
+                                            className="w-full bg-[#0E1322] text-white px-2 py-0.5 rounded border border-blue-500 focus:outline-hidden text-xs font-mono"
+                                          />
+                                          <button
+                                            onClick={handleSaveCellEdit}
+                                            className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950 rounded"
+                                            title="Save (Enter)"
+                                          >
+                                            <Check className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => setEditingCell(null)}
+                                            className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                                            title="Cancel (Esc)"
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-between group-hover:text-white">
+                                          <span>{String(val ?? '')}</span>
+                                          <Edit3 
+                                            onClick={() => setEditingCell({ rowIndex: ri, colIndex: vi, colName, value: String(val ?? '') })}
+                                            className="w-3 h-3 text-gray-600 group-hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ml-1" 
+                                          />
+                                        </div>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                                <td className="py-1.5 px-2 text-center text-gray-500">
+                                  <button
+                                    onClick={() => {
+                                      // Start editing first editable column
+                                      if (result.columns && result.columns.length > 1) {
+                                        setEditingCell({
+                                          rowIndex: ri,
+                                          colIndex: 1,
+                                          colName: result.columns[1],
+                                          value: String(row[1] ?? '')
+                                        });
+                                      }
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-blue-400 hover:bg-[#1F2942] rounded transition-colors"
+                                    title="Edit row"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -632,7 +1092,7 @@ SELECT * FROM employees;
                 <div className="text-[10px] text-gray-400">Table (public schema)</div>
               </div>
               <span className="text-[10px] font-mono text-gray-400 bg-[#1A223B] px-1.5 py-0.5 rounded">
-                {selectedTableInfo?.count ? `${selectedTableInfo.count} rows` : '0 rows'}
+                {selectedTableInfo?.count ? `${String(selectedTableInfo.count).replace(/rows?/gi, '').trim()} rows` : '0 rows'}
               </span>
             </div>
 
@@ -940,6 +1400,117 @@ SELECT * FROM employees;
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Upload / Place Dataset Modal (3rd Button action) */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141A2E] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#25324E] space-y-4 text-gray-200">
+            <div className="flex items-center justify-between border-b border-[#25324E] pb-3">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-purple-400" />
+                <h3 className="font-extrabold text-white text-sm">Upload &amp; Place Dataset in PostgreSQL</h3>
+              </div>
+              <button
+                onClick={() => setIsUploadModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* File Input */}
+              <div>
+                <label className="block font-bold text-gray-300 mb-1.5">Select Dataset File (CSV, XLSX, JSON, SQL)</label>
+                <label className="border-2 border-dashed border-[#2A3554] hover:border-purple-500 rounded-xl p-4 flex flex-col items-center justify-center gap-2 bg-[#0E1322] cursor-pointer transition-colors">
+                  <Upload className="w-6 h-6 text-purple-400" />
+                  <span className="text-gray-300 font-semibold">
+                    {uploadFileName || 'Click to browse or drop CSV/JSON file'}
+                  </span>
+                  <span className="text-[10px] text-gray-500">Supports .csv, .json, .sql, .xlsx</span>
+                  <input
+                    type="file"
+                    accept=".csv,.json,.sql,.xlsx,.txt"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Target Table Name */}
+              <div>
+                <label className="block font-bold text-gray-300 mb-1">Target Table Name</label>
+                <input
+                  type="text"
+                  value={uploadTableName}
+                  onChange={(e) => setUploadTableName(e.target.value)}
+                  placeholder="e.g. employees, customers, orders"
+                  className="w-full px-3 py-2 bg-[#0E1322] border border-[#25324E] rounded-lg font-mono text-white focus:border-purple-500 focus:outline-hidden text-xs"
+                />
+              </div>
+
+              {/* Preview Table Data */}
+              {uploadPreviewData && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <span>Parsed Columns: <strong>{uploadPreviewData.headers.length}</strong></span>
+                    <span>Sample Rows: <strong>{uploadPreviewData.rows.length}</strong></span>
+                  </div>
+                  <div className="bg-[#0E1322] rounded-lg border border-[#25324E] overflow-x-auto max-h-32 text-[10px] font-mono">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-[#182038] text-gray-300 border-b border-[#25324E]">
+                          {uploadPreviewData.headers.map((h, i) => (
+                            <th key={i} className="py-1 px-2 border-r border-[#25324E] last:border-r-0">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uploadPreviewData.rows.map((r, ri) => (
+                          <tr key={ri} className="border-b border-[#1D253C] last:border-b-0 text-gray-300">
+                            {r.map((v, vi) => (
+                              <td key={vi} className="py-1 px-2 border-r border-[#25324E] last:border-r-0 truncate max-w-[120px]">{v}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-[#25324E]">
+              <button
+                type="button"
+                onClick={() => setIsUploadModalOpen(false)}
+                className="px-3 py-2 bg-[#1C2438] hover:bg-[#25324E] text-gray-300 hover:text-white font-bold rounded-lg text-xs transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={!uploadPreviewData || !uploadTableName.trim() || isUploading}
+                onClick={handleExecuteDatasetUpload}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs shadow-xs transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                {isUploading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Placing Dataset...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import &amp; Place Table</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

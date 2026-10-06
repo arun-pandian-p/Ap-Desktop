@@ -9,8 +9,12 @@ import {
   Menu, 
   Sun, 
   Moon,
-  HelpCircle
+  HelpCircle,
+  AlertCircle
 } from 'lucide-react';
+import { verifyCredentials } from '@/services/auth';
+import crimsonSunset from '@/assets/crimson-sunset.png';
+import iconCircle from '@/assets/icon-circle.png';
 
 interface LoginViewProps {
   onUnlock: (userName: string) => void;
@@ -20,17 +24,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ onUnlock }) => {
   const [userName, setUserName] = useState('arunpandi47777@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUnlock('Arun Pandian');
+    setErrorMsg(null);
+    setIsVerifying(true);
+    try {
+      const isValid = await verifyCredentials(password);
+      if (isValid) {
+        onUnlock('Arun Pandian');
+      } else {
+        setErrorMsg('Invalid password. Please check your credentials and try again.');
+      }
+    } catch {
+      setErrorMsg('Verification encountered an error.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
     <div className="relative h-screen w-screen overflow-hidden flex flex-col justify-between select-none bg-black text-white font-sans">
       {/* Background Hero: Crimson Mountain Sunset with Lone Hiker */}
       <img
-        src="/assets/crimson-sunset.png"
+        src={crimsonSunset}
         alt="Crimson Mountain Sunset with Lone Hiker"
         className="absolute inset-0 w-full h-full object-cover filter brightness-90 contrast-105 scale-100"
       />
@@ -85,7 +104,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onUnlock }) => {
           <div className="flex justify-center -mt-2 mb-4">
             <div className="relative group">
               <img
-                src="/assets/icon-circle.png"
+                src={iconCircle}
                 alt="Ap Monogram Logo"
                 className="w-20 h-20 rounded-full object-contain shadow-2xl ring-4 ring-white/20 transition-transform transform group-hover:scale-105"
               />
@@ -100,6 +119,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onUnlock }) => {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
+            {errorMsg && (
+              <div className="p-2.5 rounded-xl bg-red-600/30 border border-red-500/50 text-white text-xs flex items-center gap-2 text-left animate-fadeIn">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-300" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
             {/* Username / Email Field */}
             <div className="relative">
               <input
@@ -107,7 +133,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onUnlock }) => {
                 required
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                placeholder="Enter your email or username (e.g. arun4709s)"
+                placeholder="Enter your email or username"
                 className="w-full pl-11 pr-4 py-3 bg-white/20 border border-white/30 rounded-full text-xs text-white placeholder-white/70 focus:outline-hidden focus:ring-2 focus:ring-[#E11D26] focus:bg-white/25 transition-all backdrop-blur-md"
               />
               <User className="w-4 h-4 text-white/75 absolute left-4 top-3.5" />
@@ -137,9 +163,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onUnlock }) => {
             {/* Sign In Button */}
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-full text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all active:scale-98 mt-2"
+              disabled={isVerifying}
+              className="w-full py-3.5 bg-[#E11D26] hover:bg-[#C8101A] disabled:opacity-75 text-white rounded-full text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all active:scale-98 mt-2 cursor-pointer"
             >
-              <span>Sign In</span>
+              <span>{isVerifying ? 'Verifying...' : 'Sign In'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

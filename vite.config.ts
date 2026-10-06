@@ -82,6 +82,7 @@ function apRunnerPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), apRunnerPlugin()],
   resolve: {
     alias: {

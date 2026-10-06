@@ -34,7 +34,12 @@ import {
   Maximize2,
   Image as ImageIcon,
   X,
-  ListFilter
+  ListFilter,
+  Trash2,
+  FileCode,
+  Download,
+  FileSpreadsheet,
+  Upload
 } from 'lucide-react';
 import initialSqlExercisesData from '@/data/sqlExercises.json';
 import { MonacoCodeEditor, MonacoCodeEditorHandle } from '@/components/common/MonacoCodeEditor';
@@ -88,7 +93,11 @@ export const SqlPracticeView: React.FC = () => {
           setExercises(list);
           const current = list[selectedExerciseIndex] || list[0];
           if (current) {
-            const initialQ = current.initial_query || current.solution_sql || 'SELECT * FROM Person;';
+            const { getCodeDraft } = await import('@/services/db');
+            const savedDraft = await getCodeDraft(current.id, 'sql');
+            const initialQ = (savedDraft !== null && savedDraft.trim().length > 0) 
+              ? savedDraft 
+              : (current.initial_query || current.solution_sql || 'SELECT * FROM Person;');
             setQuery(initialQ);
             editorRef.current?.setValue(initialQ);
             resetExerciseSqlDb(current.id);
@@ -105,10 +114,17 @@ export const SqlPracticeView: React.FC = () => {
   }, []);
 
   // Update query buffer when exercise changes
-  const handleSelectExercise = (idx: number) => {
+  const handleSelectExercise = async (idx: number) => {
     setSelectedExerciseIndex(idx);
     const nextEx = exercises[idx] || (initialSqlExercisesData[0] as SqlExercise);
-    const initialQ = nextEx.initial_query || nextEx.solution_sql || 'SELECT * FROM Person;';
+    let initialQ = nextEx.initial_query || nextEx.solution_sql || 'SELECT * FROM Person;';
+    try {
+      const { getCodeDraft } = await import('@/services/db');
+      const draft = await getCodeDraft(nextEx.id, 'sql');
+      if (draft !== null && draft.trim().length > 0) {
+        initialQ = draft;
+      }
+    } catch {}
     setQuery(initialQ);
     editorRef.current?.setValue(initialQ);
     setResult(null);
@@ -116,6 +132,19 @@ export const SqlPracticeView: React.FC = () => {
     setCustomImageUrl(nextEx.image_url || '');
     resetExerciseSqlDb(nextEx.id);
   };
+
+  // Debounced autosave for SQL code drafts
+  useEffect(() => {
+    const currentEx = exercises[selectedExerciseIndex];
+    if (!query || !currentEx?.id) return;
+    const timer = setTimeout(async () => {
+      try {
+        const { saveCodeDraft } = await import('@/services/db');
+        await saveCodeDraft(currentEx.id, 'sql', query);
+      } catch {}
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [query, selectedExerciseIndex, exercises]);
 
   const handleNextProblem = () => {
     if (selectedExerciseIndex < exercises.length - 1) {
@@ -637,23 +666,34 @@ export const SqlPracticeView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-gray-400">
               <button
                 onClick={() => editorRef.current?.format()}
-                className="hover:text-white text-gray-400 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
+                className="hover:text-white flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
                 title="Format SQL query"
               >
-                Format
+                <FileCode className="w-3.5 h-3.5 text-blue-400" />
+                <span>Format</span>
+              </button>
+              <button
+                onClick={handleResetQuery}
+                className="hover:text-white flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
+                title="Reset query back to problem initial starter code"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Reset</span>
               </button>
               <button
                 onClick={() => {
                   setQuery('');
                   editorRef.current?.setValue('');
+                  setResult(null);
                 }}
-                className="hover:text-white text-gray-400 text-[11px] px-2 py-0.5 rounded hover:bg-[#182033] cursor-pointer"
-                title="Clear editor"
+                className="hover:text-red-400 text-gray-400 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded hover:bg-red-950/30 cursor-pointer"
+                title="Clear all code in editor"
               >
-                Clear
+                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <span>Clear</span>
               </button>
             </div>
           </div>
@@ -704,12 +744,58 @@ export const SqlPracticeView: React.FC = () => {
                 </button>
               </div>
 
-              {result && (
-                <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400">
-                  <span>Runtime: <strong className="text-white">{result.execution_ms} ms</strong></span>
-                  <span>Rows: <strong className="text-white">{result.rows_count}</strong></span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {result && result.values && result.values.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const headerLine = result.columns.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+                        const rowLines = result.values.map(row => 
+                          row.map(val => `"${String(val === null || val === undefined ? '' : val).replace(/"/g, '""')}"`).join(',')
+                        );
+                        const csvContent = [headerLine, ...rowLines].join('\n');
+                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `sql_results_${Date.now()}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-[#182033] hover:bg-[#202B45] text-gray-300 hover:text-white rounded border border-[#25324E] text-[11px] font-mono transition-colors"
+                      title="Export query results to CSV"
+                    >
+                      <Download className="w-3 h-3 text-emerald-400" />
+                      <span>CSV</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="SQL Results"><Table><Row>${result.columns.map(c => `<Cell><Data ss:Type="String">${String(c)}</Data></Cell>`).join('')}</Row>${result.values.map(row => `<Row>${row.map(val => `<Cell><Data ss:Type="String">${String(val ?? '')}</Data></Cell>`).join('')}</Row>`).join('')}</Table></Worksheet></Workbook>`;
+                        const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `sql_results_${Date.now()}.xlsx`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-[#182033] hover:bg-[#202B45] text-gray-300 hover:text-white rounded border border-[#25324E] text-[11px] font-mono transition-colors"
+                      title="Export query results to XLSX"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-blue-400" />
+                      <span>XLSX</span>
+                    </button>
+                  </>
+                )}
+
+                {result && (
+                  <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400">
+                    <span>Runtime: <strong className="text-white">{result.execution_ms} ms</strong></span>
+                    <span>Rows: <strong className="text-white">{result.rows_count}</strong></span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Results Table Output Container */}

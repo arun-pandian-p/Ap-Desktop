@@ -136,10 +136,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const getHeatmapColor = (level: number) => {
     switch (level) {
-      case 4: return 'bg-[#39D353]'; // Bright neon green (10+ submissions)
-      case 3: return 'bg-[#26A641]'; // Vibrant green (6-9 submissions)
-      case 2: return 'bg-[#006D32]'; // Deep green (3-5 submissions)
-      case 1: return 'bg-[#0E4429]'; // Subtle green (1-2 submissions)
+      case 4: return 'bg-[#39D353]'; // Bright neon emerald green (5+ submissions)
+      case 3: return 'bg-[#22C55E]'; // Vibrant green (3-4 submissions)
+      case 2: return 'bg-[#16A34A]'; // Medium emerald (2 submissions)
+      case 1: return 'bg-[#15803D]'; // Clear dark green (1 submission)
       default: return 'bg-[#232733]'; // Inactive dark cell (0 submissions)
     }
   };
@@ -148,21 +148,31 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     return submissions.filter(s => s.status === 'Accepted');
   }, [submissions]);
 
-  // Compute month positions for the 52 columns
-  const monthLabels = [
-    { label: 'Oct', col: 0 },
-    { label: 'Nov', col: 4 },
-    { label: 'Dec', col: 9 },
-    { label: 'Jan', col: 13 },
-    { label: 'Feb', col: 17 },
-    { label: 'Mar', col: 22 },
-    { label: 'Apr', col: 26 },
-    { label: 'May', col: 30 },
-    { label: 'Jun', col: 35 },
-    { label: 'Jul', col: 39 },
-    { label: 'Aug', col: 43 },
-    { label: 'Sep', col: 48 },
-  ];
+  // Compute dynamic month positions for the 52 columns
+  const monthLabels = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (!heatmapData?.weeks || heatmapData.weeks.length === 0) {
+      return [
+        'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'
+      ];
+    }
+    const labels: string[] = [];
+    let lastMonth = -1;
+    heatmapData.weeks.forEach(week => {
+      const validDay = week.find(d => d.date);
+      if (validDay) {
+        const parts = validDay.date.split('-');
+        if (parts.length >= 2) {
+          const mIdx = parseInt(parts[1], 10) - 1;
+          if (mIdx !== lastMonth && mIdx >= 0 && mIdx < 12) {
+            labels.push(months[mIdx]);
+            lastMonth = mIdx;
+          }
+        }
+      }
+    });
+    return labels.length >= 6 ? labels : ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+  }, [heatmapData]);
 
   // Circle gauge calculations
   const radius = 42;
@@ -533,22 +543,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             {/* Month Labels along bottom */}
-            <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-2 min-w-[760px] px-1 select-none">
+            <div className="flex justify-between text-[10px] text-gray-400 font-mono mt-2 min-w-[760px] px-1 select-none">
               {monthLabels.map((m, idx) => (
-                <span key={idx}>{m.label}</span>
+                <span key={idx}>{m}</span>
               ))}
             </div>
 
             {/* Legend */}
-            <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono mt-3 px-1">
+            <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono mt-3 px-1">
               <span>Past 12 Months Activity</span>
               <div className="flex items-center gap-1.5 text-[10px]">
                 <span>Less</span>
-                <div className="w-2.5 h-2.5 rounded-2xs bg-[#232733]" />
-                <div className="w-2.5 h-2.5 rounded-2xs bg-[#0E4429]" />
-                <div className="w-2.5 h-2.5 rounded-2xs bg-[#006D32]" />
-                <div className="w-2.5 h-2.5 rounded-2xs bg-[#26A641]" />
-                <div className="w-2.5 h-2.5 rounded-2xs bg-[#39D353]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#232733]" title="0 submissions" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#15803D]" title="1 submission" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#16A34A]" title="2 submissions" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#22C55E]" title="3-4 submissions" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#39D353]" title="5+ submissions" />
                 <span>More</span>
               </div>
             </div>

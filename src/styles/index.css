@@ -113,22 +113,32 @@
 
 .dark .text-gray-800,
 [data-theme="dark"] .text-gray-800 {
-  color: #E2E8F0 !important;
+  color: #F1F5F9 !important;
 }
 
 .dark .text-gray-700,
 [data-theme="dark"] .text-gray-700 {
-  color: #CBD5E1 !important;
+  color: #E2E8F0 !important;
 }
 
 .dark .text-gray-600,
 [data-theme="dark"] .text-gray-600 {
-  color: #94A3B8 !important;
+  color: #CBD5E1 !important;
 }
 
 .dark .text-gray-500,
 [data-theme="dark"] .text-gray-500 {
-  color: #64748B !important;
+  color: #94A3B8 !important;
+}
+
+.dark .text-gray-400,
+[data-theme="dark"] .text-gray-400 {
+  color: #94A3B8 !important;
+}
+
+.dark .text-gray-300,
+[data-theme="dark"] .text-gray-300 {
+  color: #E2E8F0 !important;
 }
 
 .dark header,
@@ -143,12 +153,24 @@
   border-color: #1E293B !important;
 }
 
-.dark input,
-.dark select,
-.dark textarea,
-[data-theme="dark"] input,
-[data-theme="dark"] select,
-[data-theme="dark"] textarea {
+input,
+select,
+textarea {
+  color: #111827;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9CA3AF;
+  opacity: 1;
+}
+
+.dark input:not(.bg-white),
+.dark select:not(.bg-white),
+.dark textarea:not(.bg-white),
+[data-theme="dark"] input:not(.bg-white),
+[data-theme="dark"] select:not(.bg-white),
+[data-theme="dark"] textarea:not(.bg-white) {
   background-color: #131C31 !important;
   color: #F8FAFC !important;
   border-color: #24324F !important;
@@ -165,6 +187,14 @@
 }
 
 /* Switchable Accent Colors */
+[data-accent="red"],
+:root {
+  --primary: #E11D26;
+  --primary-hover: #C8101A;
+  --primary-deep: #A80000;
+  --primary-tint: #FDECEC;
+  --primary-ring: rgba(225, 29, 38, 0.25);
+}
 [data-accent="pink"] {
   --primary: #EC4899;
   --primary-hover: #DB2777;
@@ -213,6 +243,38 @@
   --primary-deep: #1E293B;
   --primary-tint: #F8FAFC;
   --primary-ring: rgba(71, 85, 105, 0.25);
+}
+
+/* Dynamic Accent Propagation Across Tailwind Red Utilities */
+[data-accent] .bg-\[\#E11D26\] {
+  background-color: var(--primary) !important;
+}
+[data-accent] .hover\:bg-\[\#C8101A\]:hover {
+  background-color: var(--primary-hover) !important;
+}
+[data-accent] .text-\[\#E11D26\] {
+  color: var(--primary) !important;
+}
+[data-accent] .text-\[\#C8101A\] {
+  color: var(--primary-hover) !important;
+}
+[data-accent] .border-\[\#E11D26\] {
+  border-color: var(--primary) !important;
+}
+[data-accent] .border-\[\#E11D26\]\/40 {
+  border-color: var(--primary-ring) !important;
+}
+[data-accent] .bg-\[\#FDECEC\] {
+  background-color: var(--primary-tint) !important;
+}
+[data-accent] .text-\[\#A80000\] {
+  color: var(--primary-deep) !important;
+}
+[data-accent] .fill-\[\#E11D26\] {
+  fill: var(--primary) !important;
+}
+[data-accent] .ring-\[\#E11D26\]\/40 {
+  --tw-ring-color: var(--primary-ring) !important;
 }
 
 /* Custom Scrollbars */

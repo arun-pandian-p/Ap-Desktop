@@ -10,10 +10,13 @@ import {
   X,
   Wifi,
   Sparkles,
-  LogOut
+  LogOut,
+  Sun,
+  Moon
 } from 'lucide-react';
-import { ScreenId } from '@/types';
+import { ScreenId, ThemeMode } from '@/types';
 import { getUserProfile } from '@/services/profile';
+import iconLogo from '@/assets/icon.png';
 
 interface TitleBarProps {
   currentScreen: ScreenId;
@@ -23,6 +26,8 @@ interface TitleBarProps {
   studyHours?: string;
   onNavigate: (screen: ScreenId) => void;
   onLock?: () => void;
+  themeMode?: ThemeMode;
+  onToggleTheme?: () => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -33,6 +38,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   studyHours = '4.2h',
   onNavigate,
   onLock,
+  themeMode = 'light',
+  onToggleTheme,
 }) => {
   const [profile, setProfile] = React.useState(getUserProfile());
 
@@ -44,28 +51,25 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     return () => window.removeEventListener('ap_profile_updated', handleUpdate);
   }, []);
   const handleMinimize = async () => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().minimize();
-    } catch {
+    if (window.electronAPI) {
+      await window.electronAPI.minimize();
+    } else {
       console.log('Window minimize (browser mode)');
     }
   };
 
   const handleMaximize = async () => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().toggleMaximize();
-    } catch {
+    if (window.electronAPI) {
+      await window.electronAPI.maximize();
+    } else {
       console.log('Window toggle maximize (browser mode)');
     }
   };
 
   const handleClose = async () => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().close();
-    } catch {
+    if (window.electronAPI) {
+      await window.electronAPI.close();
+    } else {
       console.log('Window close (browser mode)');
     }
   };
@@ -76,7 +80,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       <div className="flex items-center gap-4 titlebar-no-drag">
         <div className="flex items-center gap-2.5">
           <img 
-            src="/assets/icon.png" 
+            src={iconLogo} 
             alt="Ap Logo" 
             className="w-7 h-7 rounded-lg object-contain shadow-xs shrink-0 drop-shadow-xs" 
           />
@@ -132,20 +136,35 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* Quick Add Button */}
         <button
           onClick={onOpenQuickAdd}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95 cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Quick Add</span>
         </button>
 
+        {/* Theme Changer Toggle Button (Sun / Moon) */}
+        {onToggleTheme && (
+          <button
+            onClick={onToggleTheme}
+            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-[#F1F3F9] dark:hover:bg-[#1E293B] rounded-lg transition-colors cursor-pointer"
+            title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {themeMode === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+            ) : (
+              <Moon className="w-4 h-4 text-gray-600 fill-gray-600/10" />
+            )}
+          </button>
+        )}
+
         {/* Notification Bell */}
         <button
           onClick={() => onNavigate('reports')}
-          className="relative p-1.5 text-gray-500 hover:text-gray-900 hover:bg-[#F1F3F9] rounded-lg transition-colors cursor-pointer"
+          className="relative p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-[#F1F3F9] dark:hover:bg-[#1E293B] rounded-lg transition-colors cursor-pointer"
           title="Notifications & Reports"
         >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#E11D26] ring-2 ring-white"></span>
+          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#E11D26] ring-2 ring-white dark:ring-[#0E1526]"></span>
         </button>
 
         {/* User Profile Avatar */}

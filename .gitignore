@@ -1,7 +1,70 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Production & Build Outputs
 dist/
-src-tauri/target/
+dist-electron/
 release/
+out/
+build/certs/
 scratch/
+src-tauri/target/
+
+# Certificates & Private Keys
+*.pfx
+*.cer
+*.p12
+*.key
+*.pem
+*.crt
+ApTestCertificate.cer
+
+# Logs & Debugging
+logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Python worker caches & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.pytest_cache/
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# IDE & OS Files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

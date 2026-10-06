@@ -1,10 +1,15 @@
-name: Build & Package Windows Release
+name: Build & Package Windows Electron Release
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-windows:
@@ -22,52 +27,41 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress
-
       - name: Install Dependencies
         run: npm ci
+
+      - name: Run Type Check
+        run: npm run typecheck
 
       - name: Run Tests
         run: npm run test
 
-      - name: Build Frontend & Native App
-        run: npm run tauri build
+      - name: Build & Package Electron Windows Installer
+        run: npm run electron:dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compile Inno Setup Installer
+      - name: Verify Installer & Generate Checksum
         shell: powershell
         run: |
-          if (-not (Test-Path "src-tauri\target\release\Ap.exe")) {
-            Write-Error "Fatal: src-tauri\target\release\Ap.exe was not created by tauri build. Aborting installer packaging."
+          $installer = Get-ChildItem -Path "release" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "Fatal: No installer .exe found in release directory."
             exit 1
           }
-          $exeSize = (Get-Item "src-tauri\target\release\Ap.exe").Length
-          Write-Host "Verified native binary Ap.exe ($exeSize bytes)"
-
-          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
-          if ($iscc) {
-            & iscc "installer\ap_installer.iss"
-          } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
-            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
-          } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
-            & "C:\Program Files\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
-          } else {
-            Write-Error "ISCC.exe not found on runner"
+          Write-Host "Found installer: $($installer.FullName) ($($installer.Length) bytes)"
+          if ($installer.Length -lt 10000000) {
+            Write-Error "Fatal: Installer file size is suspiciously small ($($installer.Length) bytes)."
             exit 1
           }
-
-      - name: Generate Checksum
-        shell: powershell
-        run: |
-          $hash = Get-FileHash -Path "release\installer\Ap_Setup_v1.0.0_x64.exe" -Algorithm SHA256
-          $hash.Hash | Out-File -FilePath "release\installer\SHA256SUMS.txt"
+          $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath "release\SHA256SUMS.txt"
           Write-Host "SHA256: $($hash.Hash)"
 
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Ap-Windows-Installer
-          path: release/installer/
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt

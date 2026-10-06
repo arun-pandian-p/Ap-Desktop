@@ -111,10 +111,64 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     },
   }), []);
 
+  const [copyPasteWarning, setCopyPasteWarning] = useState<string | null>(null);
+  const warningTimerRef = useRef<any>(null);
+
+  const triggerCopyPasteBlocked = (action: 'copy' | 'paste' | 'cut') => {
+    const actionLabel = action === 'paste' ? 'Paste' : action === 'copy' ? 'Copy' : 'Cut';
+    setCopyPasteWarning(`🔒 ${actionLabel} disabled in IDE practice mode — manual typing required.`);
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current);
+    }
+    warningTimerRef.current = setTimeout(() => {
+      setCopyPasteWarning(null);
+    }, 2400);
+  };
+
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     setIsReady(true);
+
+    // Block Paste (Ctrl+V, Cmd+V, Shift+Insert)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      triggerCopyPasteBlocked('paste');
+    });
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
+      triggerCopyPasteBlocked('paste');
+    });
+
+    // Block Copy (Ctrl+C, Cmd+C)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      triggerCopyPasteBlocked('copy');
+    });
+
+    // Block Cut (Ctrl+X, Cmd+X)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+      triggerCopyPasteBlocked('cut');
+    });
+
+    // Intercept DOM paste, copy, cut events on the editor element
+    const domNode = editor.getDomNode();
+    if (domNode) {
+      domNode.addEventListener('paste', (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerCopyPasteBlocked('paste');
+      }, true);
+
+      domNode.addEventListener('copy', (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerCopyPasteBlocked('copy');
+      }, true);
+
+      domNode.addEventListener('cut', (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerCopyPasteBlocked('cut');
+      }, true);
+    }
 
     // Ctrl+Enter / Cmd+Enter shortcut
     if (onRun) {
@@ -279,13 +333,22 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
             bracketPairColorization: { enabled: true },
             autoClosingBrackets: 'always',
             autoClosingQuotes: 'always',
-            formatOnPaste: true,
+            formatOnPaste: false,
+            contextmenu: false,
             padding: { top: 10, bottom: 10 },
             renderLineHighlight: 'all',
             cursorBlinking: 'smooth',
             cursorSmoothCaretAnimation: 'on',
           }}
         />
+
+        {/* Copy/Paste Blocked Overlay Notification */}
+        {copyPasteWarning && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-2 bg-[#2D1216] border border-red-500/70 text-red-200 text-xs font-semibold rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{copyPasteWarning}</span>
+          </div>
+        )}
       </div>
 
       {/* Editor Status Bar */}

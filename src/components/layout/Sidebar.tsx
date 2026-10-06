@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ScreenId, LicenseState } from '@/types';
 import { getUserProfile, DEFAULT_USER_PROFILE } from '@/services/profile';
+import iconLogo from '@/assets/icon.png';
 
 interface SidebarProps {
   currentScreen: ScreenId;
@@ -65,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside 
-      className={`h-[calc(100vh-3rem)] bg-white border-r border-[#E8EAF2] flex flex-col justify-between transition-all duration-200 select-none z-20 ${
+      className={`h-[calc(100vh-3rem)] bg-white dark:bg-[#0E1424] border-r border-[#E8EAF2] dark:border-[#1E293B] flex flex-col justify-between transition-all duration-200 select-none z-20 ${
         isCollapsed ? 'w-16' : 'w-[225px]'
       }`}
     >
@@ -76,18 +77,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed ? (
             <div className="flex items-center gap-2.5">
               <img 
-                src="/assets/icon.png" 
+                src={iconLogo} 
                 alt="Ap Logo" 
                 className="w-8 h-8 rounded-xl object-contain shadow-xs shrink-0 drop-shadow-xs" 
               />
               <div className="flex flex-col">
-                <span className="font-extrabold text-gray-900 text-base leading-tight">Ap</span>
-                <span className="text-[10px] text-gray-400 font-medium">Prep & Practice</span>
+                <span className="font-extrabold text-gray-900 dark:text-white text-base leading-tight">Ap</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-400 font-medium">Prep & Practice</span>
               </div>
             </div>
           ) : (
             <img 
-              src="/assets/icon.png" 
+              src={iconLogo} 
               alt="Ap Logo" 
               className="w-8 h-8 rounded-xl object-contain shadow-xs mx-auto drop-shadow-xs" 
               title="Ap Workspace"
@@ -96,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={onToggleCollapse}
-            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors mx-auto"
+            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E293B] rounded-md transition-colors mx-auto"
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -116,10 +117,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-[#E11D26] text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-[#F1F3F9] hover:text-gray-900'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-[#F1F3F9] dark:hover:bg-[#1A253E] hover:text-gray-900 dark:hover:text-white'
                 } ${isCollapsed ? 'justify-center px-0' : ''}`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
                 {!isCollapsed && <span className="truncate">{item.label}</span>}
               </button>
             );
@@ -128,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Pinned User Card at Bottom */}
-      <div className="p-3 border-t border-[#E8EAF2] bg-[#F7F8FC]/50">
+      <div className="p-3 border-t border-[#E8EAF2] dark:border-[#1E293B] bg-[#F7F8FC]/50 dark:bg-[#0B101D]">
         <div className={`flex items-center gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
           <button 
             type="button"
@@ -149,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigate('profile')}
-                  className="text-xs font-bold text-gray-900 truncate hover:text-[#E11D26] transition-colors text-left cursor-pointer"
+                  className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate hover:text-[#E11D26] dark:hover:text-red-400 transition-colors text-left cursor-pointer"
                   title={`${userProfile.name} - View Profile`}
                 >
                   {userProfile.name}
@@ -158,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {onLock && (
                     <button
                       onClick={onLock}
-                      className="text-gray-400 hover:text-red-600 p-0.5 rounded transition-colors"
+                      className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-0.5 rounded transition-colors"
                       title="Log Out (Lock Workspace)"
                     >
                       <LogOut className="w-3.5 h-3.5" />
@@ -166,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                   <button 
                     onClick={() => onNavigate('settings')}
-                    className="text-gray-400 hover:text-gray-600 p-0.5 rounded transition-colors"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 rounded transition-colors"
                     title="Settings"
                   >
                     <Settings className="w-3.5 h-3.5" />
@@ -174,14 +175,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               </div>
               <div className="flex items-center justify-between text-[11px]">
-                <div className="flex items-center gap-1 font-semibold text-amber-600">
+                <div className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
                   <Crown className="w-3 h-3 fill-amber-500 text-amber-500" />
                   <span>{license.edition === 'pro' ? 'Pro Plan' : 'Free Tier'}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => onNavigate('profile')}
-                  className="text-gray-400 hover:text-gray-600 text-[10px] font-mono truncate text-left cursor-pointer"
+                  className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-[10px] font-mono truncate text-left cursor-pointer"
                 >
                   {userProfile.username}
                 </button>
@@ -191,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onLock && (
               <button
                 onClick={onLock}
-                className="text-gray-400 hover:text-red-600 p-1"
+                className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1"
                 title="Log Out"
               >
                 <LogOut className="w-3.5 h-3.5" />

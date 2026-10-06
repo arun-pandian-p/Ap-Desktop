@@ -34,6 +34,7 @@ import {
   Code2
 } from 'lucide-react';
 import { AccentColor, ThemeMode, LicenseState, ScreenId, UserProfile } from '@/types';
+import iconLogo from '@/assets/icon.png';
 import { getIntegrityDiagnostics, getRecentSecurityEvents } from '@/services/integrity';
 import { getMachineFingerprint, saveLicense } from '@/services/license';
 import { 
@@ -129,17 +130,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     action: () => Promise<void>;
   } | null>(null);
 
+  const [appInfo, setAppInfo] = useState<any>(null);
   // Python diagnostic state
   const [diagRunning, setDiagRunning] = useState(false);
   const [diagResult, setDiagResult] = useState<string | null>(null);
 
   useEffect(() => {
     async function initSettings() {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const info = await invoke('app_info');
-        setTauriInfo(info);
-      } catch {}
+      if (window.electronAPI) {
+        try {
+          const info = await window.electronAPI.appInfo();
+          setAppInfo(info);
+        } catch {}
+      }
 
       const pInfo = await getPythonInterpreterInfo();
       setPyInfo(pInfo);
@@ -1070,7 +1073,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               {/* Reset Uploaded Datasets & Recovery Card */}
-              <div className="p-5 bg-gradient-to-r from-red-50/40 via-amber-50/20 to-gray-50 rounded-2xl border border-red-200/60 space-y-4">
+              <div className="p-5 bg-gradient-to-r from-red-50/40 via-amber-50/20 to-gray-50 rounded-2xl border border-red-200/60 space-y-4 shadow-2xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200/70 pb-3">
                   <div>
                     <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -1097,7 +1100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                  <div className="p-3.5 bg-white rounded-xl border border-gray-200 flex flex-col justify-between shadow-2xs">
                     <div>
                       <div className="text-xs font-bold text-gray-800">Python Practice</div>
                       <div className="text-[11px] text-gray-500 mt-0.5">{curriculumStats.total} total problems</div>
@@ -1115,7 +1118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </button>
                   </div>
 
-                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                  <div className="p-3.5 bg-white rounded-xl border border-gray-200 flex flex-col justify-between shadow-2xs">
                     <div>
                       <div className="text-xs font-bold text-gray-800">SQL Practice</div>
                       <div className="text-[11px] text-gray-500 mt-0.5">{sqlStats.total} exercises</div>
@@ -1133,7 +1136,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </button>
                   </div>
 
-                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                  <div className="p-3.5 bg-white rounded-xl border border-gray-200 flex flex-col justify-between shadow-2xs">
                     <div>
                       <div className="text-xs font-bold text-gray-800">PostgreSQL Lab</div>
                       <div className="text-[11px] text-gray-500 mt-0.5">{postgresStats.total} labs</div>
@@ -1148,40 +1151,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       className="mt-3 w-full py-1.5 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 text-gray-700 border border-gray-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                     >
                       Reset PG Seed
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600 border-t border-gray-200/60 mt-2">
-                  <div className="flex items-center gap-2">
-                    <RotateCcw className="w-4 h-4 text-red-600 shrink-0" />
-                    <span>Clear all submissions, active history, streaks, and heatmap to 0 (clean slate)</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => setConfirmResetModal({
-                        open: true,
-                        title: 'Reset All Submissions & History to 0?',
-                        description: 'This will completely wipe all attempts, clear submission history, reset streaks/heatmap to 0, and revert all problem statuses back to "todo".',
-                        action: handleClearAllSubmissions,
-                      })}
-                      disabled={isResetting}
-                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Reset All Submissions & History (0 Subs)</span>
-                    </button>
-                    <button
-                      onClick={() => setConfirmResetModal({
-                        open: true,
-                        title: 'Load Demo Baseline Submissions?',
-                        description: 'Restore the demo baseline data: 90 Solved, 124 Submissions, and 3-Day streak.',
-                        action: handleResetSubmissions,
-                      })}
-                      disabled={isResetting}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Load Demo (90 AC)
                     </button>
                   </div>
                 </div>
@@ -1354,7 +1323,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div className="flex items-center gap-5 p-5 bg-gradient-to-r from-red-50/50 via-white to-gray-50/50 rounded-2xl border border-red-100 shadow-2xs">
                 <img 
-                  src="/assets/icon.png" 
+                  src={iconLogo} 
                   alt="Glossy Red Ap Monogram Icon" 
                   className="w-16 h-16 rounded-2xl object-contain drop-shadow-md shrink-0" 
                 />

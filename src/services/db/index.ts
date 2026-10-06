@@ -37,12 +37,61 @@ async function computeRowHmac(prevHmac: string, canonicalRow: string): Promise<s
   return 'hmac-' + Math.abs(hash).toString(16);
 }
 
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+
+async function loadSqlJs(): Promise<any> {
+  const init = typeof initSqlJs === 'function' ? initSqlJs : (initSqlJs as any)?.default;
+  if (typeof window === 'undefined') {
+    return await init({});
+  }
+
+  // 1. Try bundled Vite wasm URL
+  try {
+    const SQL = await init({
+      locateFile: (file: string) => {
+        if (file.endsWith('.wasm')) {
+          return sqlWasmUrl || '/sql-wasm.wasm';
+        }
+        return file;
+      }
+    });
+    if (SQL && SQL.Database) return SQL;
+  } catch (err1) {
+    console.warn('WASM load strategy 1 failed, trying fallback:', err1);
+  }
+
+  // 2. Try direct fetch with candidate URLs
+  const locHref = typeof window !== 'undefined' && window.location ? window.location.href : undefined;
+  const candidateUrls = [
+    sqlWasmUrl,
+    '/sql-wasm.wasm',
+    './sql-wasm.wasm',
+    'sql-wasm.wasm',
+    locHref ? new URL('/sql-wasm.wasm', locHref).href : '',
+    locHref ? new URL('sql-wasm.wasm', locHref).href : '',
+  ].filter(Boolean);
+
+  for (const url of candidateUrls) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const wasmBinary = await resp.arrayBuffer();
+        const SQL = await init({ wasmBinary });
+        if (SQL && SQL.Database) return SQL;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  // 3. Fallback to default locateFile
+  return await init({ locateFile: () => 'sql-wasm.wasm' });
+}
+
 export async function getDatabase(): Promise<Database> {
   if (dbInstance) return dbInstance;
 
-  const init = typeof initSqlJs === 'function' ? initSqlJs : (initSqlJs as any)?.default;
-  const isNode = typeof window === 'undefined';
-  const SQL = await init(isNode ? {} : { locateFile: () => `/sql-wasm.wasm` });
+  const SQL = await loadSqlJs();
 
   const savedData = typeof localStorage !== 'undefined' ? localStorage.getItem(DB_STORAGE_KEY) : null;
   if (savedData) {
@@ -54,7 +103,7 @@ export async function getDatabase(): Promise<Database> {
       }
       const restored = new SQL.Database(bytes);
       initializeSchema(restored);
-      await seedAdditionalTables(restored);
+      await ensureSeeded(restored);
       dbInstance = restored;
       persistDatabase();
       return restored;
@@ -72,6 +121,31 @@ export async function getDatabase(): Promise<Database> {
   persistDatabase();
 
   return freshDb;
+}
+
+async function ensureSeeded(db: Database): Promise<void> {
+  try {
+    const qCount = db.exec(`SELECT COUNT(*) FROM questions`);
+    const count = qCount.length > 0 ? (qCount[0].values[0][0] as number) : 0;
+    if (count === 0) {
+      await seedInitialData(db);
+    }
+    await seedAdditionalTables(db);
+    
+    const initSettingRes = db.exec(`SELECT value FROM app_settings WHERE key = 'attempts_initialized'`);
+    const initStatus = initSettingRes.length > 0 && initSettingRes[0].values.length > 0 ? String(initSettingRes[0].values[0][0]) : null;
+    if (!initStatus) {
+      const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
+      const attCount = attCountRes.length > 0 && attCountRes[0].values.length > 0 ? (attCountRes[0].values[0][0] as number) : 0;
+      if (attCount === 0) {
+        db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'baseline');`);
+        await seedBaselineAttempts(db);
+      }
+    }
+  } catch {
+    await seedInitialData(db);
+    await seedAdditionalTables(db);
+  }
 }
 
 export function persistDatabase(): void {
@@ -253,6 +327,15 @@ function initializeSchema(db: Database): void {
       verification_sql TEXT,
       notes TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS code_drafts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      problem_id TEXT NOT NULL,
+      language TEXT NOT NULL,
+      code TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -1316,21 +1399,34 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
       hardQ[4] || { id: 'att-3', title: 'Trapping Rain Water', difficulty: 'Hard', pattern: 'Two Pointers' },
     ];
 
+    // Rich distribution across the past 365 days (52 weeks)
     const activeDayOffsets = [
-      0, -1, -2,
-      -7, -8,
-      -15,
-      -23, -24, -25,
-      -39,
-      -58,
-      -82,
-      -109, -110,
-      -140,
-      -175,
-      -215,
-      -255,
-      -300,
-      -345,
+      // Current live streak (5 days)
+      0, -1, -2, -3, -4,
+      // Month 0 (recent weeks)
+      -7, -8, -10, -12, -15, -17, -20, -22, -25, -28,
+      // Month 1
+      -32, -34, -36, -39, -42, -45, -48, -52, -55,
+      // Month 2 (14-day max streak!)
+      -60, -61, -62, -63, -64, -65, -66, -67, -68, -69, -70, -71, -72, -73,
+      // Month 3
+      -85, -88, -91, -94, -98, -102, -106, -110, -115,
+      // Month 4
+      -122, -125, -128, -132, -136, -140, -145,
+      // Month 5
+      -152, -155, -158, -162, -166, -170, -175,
+      // Month 6
+      -182, -185, -189, -193, -197, -202, -207,
+      // Month 7
+      -214, -218, -222, -226, -230, -235,
+      // Month 8
+      -244, -248, -252, -256, -260, -265,
+      // Month 9
+      -274, -278, -282, -286, -291, -296,
+      // Month 10
+      -304, -308, -313, -318, -323, -328,
+      // Month 11
+      -334, -338, -343, -348, -353, -358
     ];
 
     const attemptsToInsert: any[] = [];
@@ -1342,10 +1438,12 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
       return d.toISOString();
     };
 
+    // 1. Distribute all 90 solved questions across the active days
     let pIdx = 0;
-    for (let dayIdx = 0; dayIdx < activeDayOffsets.length; dayIdx++) {
+    for (let dayIdx = 0; dayIdx < activeDayOffsets.length && pIdx < solvedSet.length; dayIdx++) {
       const offset = activeDayOffsets[dayIdx];
-      const countForDay = dayIdx < 10 ? 5 : 4;
+      // Insert 1-2 solved questions on this day
+      const countForDay = (dayIdx % 3 === 0) ? 2 : 1;
       for (let c = 0; c < countForDay && pIdx < solvedSet.length; c++) {
         const item = solvedSet[pIdx++];
         attemptsToInsert.push({
@@ -1358,17 +1456,19 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
           language: item.type === 'sql' ? 'sql' : 'python',
           code: item.type === 'sql' ? 'SELECT * FROM Person;' : 'def solution():\n    pass',
           status: 'Accepted',
-          runtime_ms: 10 + Math.floor(Math.random() * 40),
-          memory_kb: 14000 + Math.floor(Math.random() * 2000),
+          runtime_ms: 12 + Math.floor(Math.random() * 35),
+          memory_kb: 14000 + Math.floor(Math.random() * 1800),
           test_cases_passed: 10,
           total_test_cases: 10,
-          created_at: getIsoForDayOffset(offset, 10 + (c % 10), (c * 7) % 60),
+          created_at: getIsoForDayOffset(offset, 10 + (c * 2), (c * 17) % 60),
         });
       }
     }
 
+    // Remaining solved items if any
     while (pIdx < solvedSet.length) {
       const item = solvedSet[pIdx++];
+      const offset = activeDayOffsets[pIdx % activeDayOffsets.length];
       attemptsToInsert.push({
         id: `seed-sub-${attemptsToInsert.length + 1}`,
         question_id: item.id,
@@ -1383,10 +1483,11 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
         memory_kb: 14200,
         test_cases_passed: 10,
         total_test_cases: 10,
-        created_at: getIsoForDayOffset(activeDayOffsets[0], 11, 20),
+        created_at: getIsoForDayOffset(offset, 11, 20),
       });
     }
 
+    // 2. Insert attempting problems with Wrong Answer
     for (let i = 0; i < attemptingQ.length; i++) {
       const att = attemptingQ[i];
       attemptsToInsert.push({
@@ -1403,14 +1504,16 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
         memory_kb: 15300,
         test_cases_passed: 5,
         total_test_cases: 10,
-        created_at: getIsoForDayOffset(activeDayOffsets[0], 12, 10 + i * 5),
+        created_at: getIsoForDayOffset(activeDayOffsets[i % 5], 16, 15 + i * 5),
       });
     }
 
+    // 3. Add repeat practice submissions & reviews across days to reach ~210 total submissions
     let extraCounter = 0;
-    while (attemptsToInsert.length < 124) {
+    while (attemptsToInsert.length < 210) {
       const targetDay = activeDayOffsets[extraCounter % activeDayOffsets.length];
       const sampleItem = solvedSet[extraCounter % solvedSet.length];
+      const isAccepted = extraCounter % 5 !== 0;
       attemptsToInsert.push({
         id: `seed-sub-${attemptsToInsert.length + 1}`,
         question_id: sampleItem.id,
@@ -1420,12 +1523,12 @@ export async function seedBaselineAttempts(db: Database): Promise<void> {
         problem_type: sampleItem.type,
         language: sampleItem.type === 'sql' ? 'sql' : 'python',
         code: sampleItem.type === 'sql' ? 'SELECT * FROM Person;' : 'def solution():\n    pass',
-        status: extraCounter % 2 === 0 ? 'Wrong Answer' : 'Accepted',
-        runtime_ms: 25,
-        memory_kb: 14800,
-        test_cases_passed: 8,
+        status: isAccepted ? 'Accepted' : 'Wrong Answer',
+        runtime_ms: 10 + Math.floor(Math.random() * 40),
+        memory_kb: 14100 + Math.floor(Math.random() * 1500),
+        test_cases_passed: isAccepted ? 10 : 7,
         total_test_cases: 10,
-        created_at: getIsoForDayOffset(targetDay, 15, (extraCounter * 11) % 60),
+        created_at: getIsoForDayOffset(targetDay, 14 + (extraCounter % 8), (extraCounter * 13) % 60),
       });
       extraCounter++;
     }
@@ -1550,6 +1653,18 @@ export async function recalculateStreaks(): Promise<{
 export async function fetchProfileStats(): Promise<ProfileStatsResult> {
   const db = await getDatabase();
   try {
+    const initSettingRes = db.exec(`SELECT value FROM app_settings WHERE key = 'attempts_initialized'`);
+    const initStatus = initSettingRes.length > 0 && initSettingRes[0].values.length > 0 ? String(initSettingRes[0].values[0][0]) : null;
+    if (!initStatus) {
+      const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
+      const attCount = attCountRes.length > 0 && attCountRes[0].values.length > 0 ? (attCountRes[0].values[0][0] as number) : 0;
+      if (attCount === 0) {
+        db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'baseline');`);
+        await seedBaselineAttempts(db);
+        persistDatabase();
+      }
+    }
+
     const solvedRes = db.exec(`SELECT COUNT(DISTINCT question_id) FROM attempts WHERE status = 'Accepted'`);
     const totalSolved = solvedRes.length && solvedRes[0].values.length ? (solvedRes[0].values[0][0] as number) : 0;
 
@@ -1643,6 +1758,19 @@ export async function fetchProfileStats(): Promise<ProfileStatsResult> {
 
 export async function fetchSubmissionHeatmap(year: number | 'current' = 'current'): Promise<HeatmapResult> {
   const db = await getDatabase();
+
+  const initSettingRes = db.exec(`SELECT value FROM app_settings WHERE key = 'attempts_initialized'`);
+  const initStatus = initSettingRes.length > 0 && initSettingRes[0].values.length > 0 ? String(initSettingRes[0].values[0][0]) : null;
+  if (!initStatus) {
+    const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
+    const attCount = attCountRes.length > 0 && attCountRes[0].values.length > 0 ? (attCountRes[0].values[0][0] as number) : 0;
+    if (attCount === 0) {
+      db.run(`INSERT OR REPLACE INTO app_settings (key, value) VALUES ('attempts_initialized', 'baseline');`);
+      await seedBaselineAttempts(db);
+      persistDatabase();
+    }
+  }
+
   const streakInfo = await recalculateStreaks();
 
   const res = db.exec(`SELECT created_at, status FROM attempts ORDER BY created_at ASC`);
@@ -1689,9 +1817,9 @@ export async function fetchSubmissionHeatmap(year: number | 'current' = 'current
     const acceptedCount = data ? data.accepted : 0;
 
     let level = 0;
-    if (count >= 10) level = 4;
-    else if (count >= 6) level = 3;
-    else if (count >= 3) level = 2;
+    if (count >= 5) level = 4;
+    else if (count >= 3) level = 3;
+    else if (count >= 2) level = 2;
     else if (count >= 1) level = 1;
 
     curWeek.push({
@@ -1869,5 +1997,49 @@ export async function clearSubmissionsForTesting(): Promise<void> {
     window.dispatchEvent(new CustomEvent('ap_profile_updated'));
     window.dispatchEvent(new CustomEvent('ap_questions_updated'));
   }
+}
+
+export async function saveCodeDraft(
+  problemId: string, 
+  language: string, 
+  code: string, 
+  userId: string = 'default'
+): Promise<void> {
+  const db = await getDatabase();
+  const id = `${userId}::${problemId}::${language}`;
+  db.run(
+    `INSERT OR REPLACE INTO code_drafts (id, user_id, problem_id, language, code, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+    [id, userId, problemId, language, code]
+  );
+  persistDatabase();
+}
+
+export async function getCodeDraft(
+  problemId: string, 
+  language: string, 
+  userId: string = 'default'
+): Promise<string | null> {
+  const db = await getDatabase();
+  const id = `${userId}::${problemId}::${language}`;
+  try {
+    const res = db.exec(`SELECT code FROM code_drafts WHERE id = ?`, [id]);
+    if (res.length > 0 && res[0].values.length > 0 && res[0].values[0][0] !== null) {
+      return String(res[0].values[0][0]);
+    }
+  } catch {}
+  return null;
+}
+
+export async function clearCodeDraft(
+  problemId: string, 
+  language: string, 
+  userId: string = 'default'
+): Promise<void> {
+  const db = await getDatabase();
+  const id = `${userId}::${problemId}::${language}`;
+  try {
+    db.run(`DELETE FROM code_drafts WHERE id = ?`, [id]);
+    persistDatabase();
+  } catch {}
 }
 

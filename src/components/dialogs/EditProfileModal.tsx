@@ -258,7 +258,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 required
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold"
                 placeholder="Arun Pandian"
               />
             </div>
@@ -273,7 +273,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 required
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium font-mono"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold font-mono"
                 placeholder="arun4709s"
               />
             </div>
@@ -288,7 +288,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold"
                 placeholder="arunpandi47777@gmail.com"
               />
             </div>
@@ -302,7 +302,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 type="text"
                 value={location}
                 onChange={e => setLocation(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold"
                 placeholder="India"
               />
             </div>
@@ -319,7 +319,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 type="text"
                 value={bio}
                 onChange={e => setBio(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold"
                 placeholder="Insanely mad about coding"
               />
             </div>
@@ -333,7 +333,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 type="text"
                 value={institution}
                 onChange={e => setInstitution(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium"
+                className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold"
                 placeholder="National Institute of Technology Surathkal"
               />
             </div>
@@ -346,7 +346,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1.5">
                   <Globe className="w-3 h-3 text-blue-500" />
                   <span>Website / Portfolio</span>
                 </label>
@@ -354,13 +354,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   type="text"
                   value={website}
                   onChange={e => setWebsite(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono"
+                  className="w-full px-3 py-1.5 text-xs text-gray-900 rounded-lg border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono font-semibold"
                   placeholder="https://arunpandian.dev"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1.5">
                   <Github className="w-3 h-3 text-gray-700" />
                   <span>GitHub Handle</span>
                 </label>
@@ -368,13 +368,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   type="text"
                   value={github}
                   onChange={e => setGithub(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono"
+                  className="w-full px-3 py-1.5 text-xs text-gray-900 rounded-lg border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono font-semibold"
                   placeholder="arun4709s"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1.5">
                   <Linkedin className="w-3 h-3 text-blue-600" />
                   <span>LinkedIn Handle</span>
                 </label>
@@ -382,13 +382,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   type="text"
                   value={linkedin}
                   onChange={e => setLinkedin(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono"
+                  className="w-full px-3 py-1.5 text-xs text-gray-900 rounded-lg border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono font-semibold"
                   placeholder="arun-pandian"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1.5">
                   <Twitter className="w-3 h-3 text-sky-500" />
                   <span>X / Twitter Handle</span>
                 </label>
@@ -396,7 +396,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   type="text"
                   value={twitter}
                   onChange={e => setTwitter(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono"
+                  className="w-full px-3 py-1.5 text-xs text-gray-900 rounded-lg border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-1 focus:ring-red-100 font-mono font-semibold"
                   placeholder="arunpandian"
                 />
               </div>
@@ -413,7 +413,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               type="text"
               value={skillsStr}
               onChange={e => setSkillsStr(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-medium font-mono"
+              className="w-full px-3.5 py-2 text-xs text-gray-900 rounded-xl border border-gray-300 bg-white placeholder:text-gray-400 focus:outline-none focus:border-[#E11D26] focus:ring-2 focus:ring-red-100 transition-all font-semibold font-mono"
               placeholder="c++, python, sql, rust, go, mern, flutter"
             />
           </div>
