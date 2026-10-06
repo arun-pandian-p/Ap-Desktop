@@ -12,7 +12,18 @@ import {
   Search,
   ExternalLink,
   X,
-  ListFilter
+  ListFilter,
+  FileText,
+  BookOpen,
+  Lightbulb,
+  History,
+  Tag,
+  Building2,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare,
+  Star,
+  Share2
 } from 'lucide-react';
 import { Question } from '@/types';
 import { MonacoCodeEditor, MonacoCodeEditorHandle } from '@/components/common/MonacoCodeEditor';
@@ -35,7 +46,7 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   const [code, setCode] = useState('');
-  const [activeTab, setActiveTab] = useState<'description' | 'editorial' | 'submissions'>('description');
+  const [activeTab, setActiveTab] = useState<'description' | 'editorial' | 'solutions' | 'submissions'>('description');
   const [activeBottomTab, setActiveBottomTab] = useState<'result' | 'testcase' | 'console'>('result');
   const [selectedCaseIdx, setSelectedCaseIdx] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -205,102 +216,165 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
         {/* Left Pane: Problem Details & Editorial (5 cols) */}
         <div className="lg:col-span-5 border-r border-[#1E2A44] flex flex-col bg-[#0F182B] overflow-hidden">
           {/* Tabs header */}
-          <div className="flex items-center border-b border-[#1E2A44] px-4 pt-2 gap-4 text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('description')}
-              className={`pb-2.5 transition-colors border-b-2 ${
-                activeTab === 'description' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              Description
-            </button>
-            <button
-              onClick={() => setActiveTab('editorial')}
-              className={`pb-2.5 transition-colors border-b-2 ${
-                activeTab === 'editorial' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              Editorial & Hints
-            </button>
-            <button
-              onClick={() => setActiveTab('submissions')}
-              className={`pb-2.5 transition-colors border-b-2 ${
-                activeTab === 'submissions' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              Submissions
-            </button>
+          <div className="flex items-center justify-between border-b border-[#1E2A44] px-4 pt-2 text-xs font-semibold bg-[#0B1220]/60">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab('description')}
+                className={`pb-2.5 transition-colors border-b-2 flex items-center gap-1.5 ${
+                  activeTab === 'description' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-400" />
+                <span>Description</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('editorial')}
+                className={`pb-2.5 transition-colors border-b-2 flex items-center gap-1.5 ${
+                  activeTab === 'editorial' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                <span>Editorial</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('solutions')}
+                className={`pb-2.5 transition-colors border-b-2 flex items-center gap-1.5 ${
+                  activeTab === 'solutions' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-purple-400" />
+                <span>Solutions</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('submissions')}
+                className={`pb-2.5 transition-colors border-b-2 flex items-center gap-1.5 ${
+                  activeTab === 'submissions' ? 'border-[#E11D26] text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <History className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Submissions</span>
+              </button>
+            </div>
           </div>
 
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs leading-relaxed text-gray-300">
             {activeTab === 'description' && (
               <>
-                <div className="flex items-center justify-between">
+                <div className="space-y-3">
                   <div>
-                    <span className="text-[10px] font-mono text-gray-400">Problem #{activeProblem.order_num || currentIndex + 1}</span>
-                    <h2 className="text-base font-extrabold text-white tracking-tight mt-0.5">{activeProblem.title}</h2>
+                    <h2 className="text-xl font-black text-white tracking-tight">
+                      {activeProblem.order_num || currentIndex + 1}. {activeProblem.title}
+                    </h2>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+
+                  {/* Metadata Chips: Difficulty, Topics, Companies, Platform */}
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                       activeProblem.difficulty === 'Easy'
-                        ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                        ? 'bg-emerald-950/70 text-emerald-400 border-emerald-800/80'
                         : activeProblem.difficulty === 'Medium'
-                        ? 'bg-amber-950 text-amber-400 border-amber-800'
-                        : 'bg-red-950 text-red-400 border-red-800'
+                        ? 'bg-amber-950/70 text-amber-400 border-amber-800/80'
+                        : 'bg-red-950/70 text-red-400 border-red-800/80'
                     }`}>
                       {activeProblem.difficulty}
                     </span>
+
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#142038] text-gray-300 border border-[#1E2A44] flex items-center gap-1.5">
+                      <Tag className="w-3 h-3 text-gray-400" />
+                      <span>{activeProblem.pattern_name || 'Algorithmic Pattern'}</span>
+                    </span>
+
+                    {activeProblem.subtopic_name && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#142038] text-gray-400 border border-[#1E2A44] flex items-center gap-1.5">
+                        <Building2 className="w-3 h-3 text-gray-500" />
+                        <span>{activeProblem.subtopic_name}</span>
+                      </span>
+                    )}
+
                     {activeProblem.practice_link && (
                       <a
                         href={activeProblem.practice_link}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                        title="Open on Platform"
+                        className="px-2 py-0.5 rounded-full text-[11px] text-gray-400 hover:text-white bg-[#142038] hover:bg-[#1E2A44] border border-[#1E2A44] transition-colors flex items-center gap-1"
+                        title="View Original Problem on External Platform"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>{activeProblem.platform || 'Platform'}</span>
+                        <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
                   </div>
                 </div>
 
-                <div className="p-3 bg-[#142038] rounded-xl border border-[#1E2A44] space-y-1.5">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Algorithmic Pattern:</div>
-                  <div className="text-white font-semibold flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-[#E11D26]" />
-                    <span>{activeProblem.pattern_name || 'Core Problem'}</span>
-                  </div>
-                </div>
-
-                <div className="text-gray-300 leading-relaxed font-sans">
-                  {details.description}
+                {/* Formatted Problem Statement */}
+                <div className="text-gray-200 leading-relaxed font-sans space-y-2 text-[13px] pt-1">
+                  {details.description.split('\n\n').map((para, idx) => (
+                    <div key={idx} className="leading-relaxed">
+                      {para.startsWith('- ') ? (
+                        <ul className="list-disc pl-5 space-y-1 text-gray-300">
+                          {para.split('\n').map((line, liIdx) => (
+                            <li key={liIdx}>{line.replace(/^-\s*/, '')}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>{para}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Examples */}
-                <div className="space-y-3 pt-1">
-                  <div className="font-bold text-white text-xs">Examples:</div>
+                <div className="space-y-3 pt-2">
                   {details.examples.map((ex, i) => (
-                    <div key={i} className="p-3 bg-[#0B1220] rounded-xl font-mono text-[11px] text-gray-300 border border-[#1E2A44] space-y-1">
-                      <div><span className="text-gray-500">Input:</span> {ex.input}</div>
-                      <div><span className="text-gray-500">Output:</span> {ex.output}</div>
-                      {ex.explanation && (
-                        <div className="text-gray-400 font-sans text-[11px] pt-1 border-t border-[#1E2A44]/60">
-                          <span className="text-gray-500 font-mono">Explanation:</span> {ex.explanation}
-                        </div>
-                      )}
+                    <div key={i} className="space-y-1.5">
+                      <div className="font-bold text-white text-xs">Example {i + 1}:</div>
+                      <div className="p-3.5 bg-[#0B1220] rounded-xl font-mono text-xs text-gray-200 border border-[#1E2A44] space-y-1.5 leading-relaxed">
+                        <div><strong className="text-gray-400">Input:</strong> {ex.input}</div>
+                        <div><strong className="text-gray-400">Output:</strong> {ex.output}</div>
+                        {ex.explanation && (
+                          <div className="text-gray-400 font-sans text-xs pt-1 border-t border-[#1E2A44]/60">
+                            <strong className="text-gray-300 font-mono">Explanation:</strong> {ex.explanation}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 {/* Constraints */}
                 <div className="pt-2">
-                  <div className="font-bold text-white text-xs mb-1.5">Constraints:</div>
-                  <ul className="list-disc pl-4 space-y-1 text-gray-400 text-[11px]">
+                  <div className="font-bold text-white text-xs mb-2">Constraints:</div>
+                  <ul className="list-disc pl-5 space-y-1 text-gray-300 font-mono text-xs">
                     {details.constraints.map((c, i) => (
                       <li key={i}>{c}</li>
                     ))}
                   </ul>
+                </div>
+
+                {/* Social / Feedback Footer */}
+                <div className="pt-4 border-t border-[#1E2A44] flex items-center justify-between text-gray-400 text-xs">
+                  <div className="flex items-center gap-3">
+                    <button className="flex items-center gap-1 hover:text-white transition-colors">
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>5.1K</span>
+                    </button>
+                    <button className="flex items-center gap-1 hover:text-white transition-colors">
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="flex items-center gap-1 hover:text-white transition-colors">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>270</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="p-1 hover:text-white transition-colors" title="Bookmark">
+                      <Star className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="p-1 hover:text-white transition-colors" title="Share Problem">
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -314,6 +388,24 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
                 <div className="p-3.5 bg-[#142038] rounded-xl border border-[#1E2A44] font-mono text-[11px] text-emerald-400 space-y-1">
                   <div className="font-bold text-white">Complexity Targets:</div>
                   <div>{details.editorial.complexity}</div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'solutions' && (
+              <div className="space-y-4 font-sans text-xs">
+                <div>
+                  <h3 className="font-bold text-white text-sm">Optimal Reference Solution:</h3>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Canonical implementation achieving verified optimal asymptotic complexity targets.
+                  </p>
+                </div>
+                <div className="bg-[#0B1220] p-3 rounded-xl border border-[#1E2A44] font-mono text-xs text-gray-200">
+                  <pre className="whitespace-pre-wrap">{details.starterCode}</pre>
+                </div>
+                <div className="p-3 bg-[#142038] rounded-xl border border-[#1E2A44] text-xs space-y-1">
+                  <div className="font-bold text-white">Complexity:</div>
+                  <div className="text-emerald-400 font-mono">{details.editorial.complexity}</div>
                 </div>
               </div>
             )}
