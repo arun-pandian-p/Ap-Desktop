@@ -1,5 +1,9 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import Editor, { OnMount } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import Editor, { OnMount, loader } from '@monaco-editor/react';
+
+// Guarantee 100% offline Monaco operation without CDN calls
+loader.config({ monaco });
 import { 
   AlertCircle, 
   RefreshCw, 

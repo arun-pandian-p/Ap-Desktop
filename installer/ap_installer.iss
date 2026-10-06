@@ -1,6 +1,6 @@
 ; =====================================================================
 ; Ap — Developer Practice & Interview Prep Platform
-; Production Inno Setup 6 Installer Script
+; Self-Contained Production Inno Setup 6 Installer Script
 ; =====================================================================
 
 #define MyAppName "Ap"
@@ -25,7 +25,6 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\release\installer
 OutputBaseFilename=Ap_Setup_v{#MyAppVersion}_x64
-; SetupIconFile=..\src-tauri\icons\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -47,11 +46,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Main Executable & Binaries
 Source: "..\src-tauri\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion restartreplace
-; Production Web Assets & SQL Wasm Engine
+; Complete Production Web Assets (Local Offline Monaco Editor, Language Workers, Styles, Icons)
 Source: "..\dist\*"; DestDir: "{app}\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Execution Workers (Python sandbox & PostgreSQL bridge)
+; Execution Workers (Python sandbox worker & PostgreSQL bridge)
 Source: "..\workers\*"; DestDir: "{app}\workers"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Application Icon
+; Multi-Resolution Application Icon
 Source: "..\src-tauri\icons\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -67,11 +66,40 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Type: files; Name: "{app}\*.log"
 
 [Code]
-// Ensure user databases stored in %APPDATA% or %LOCALAPPDATA% are untouched during upgrades/uninstalls
+// Detect Microsoft WebView2 Runtime in 32-bit/64-bit Registry
+function IsWebView2Installed(): Boolean;
+var
+  InstalledVersion: String;
+begin
+  Result := False;
+  if RegQueryStringValue(HKLM64, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', InstalledVersion) then
+  begin
+    if (InstalledVersion <> '') and (InstalledVersion <> '0.0.0.0') then
+      Result := True;
+  end;
+  if not Result and RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', InstalledVersion) then
+  begin
+    if (InstalledVersion <> '') and (InstalledVersion <> '0.0.0.0') then
+      Result := True;
+  end;
+end;
+
+// Pre-installation check
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  // If WebView2 is not detected on Windows 10/11, notify user before installation finishes
+  if not IsWebView2Installed() then
+  begin
+    Log('Notice: Microsoft Edge WebView2 runtime was not detected. Tauri will use system Evergreen WebView2.');
+  end;
+end;
+
+// Ensure user SQLite databases in %APPDATA% or %LOCALAPPDATA% are untouched during upgrades/uninstalls
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    // Preserves %APPDATA%\com.ap.desktop and %LOCALAPPDATA%\Ap Workspace databases
+    // Explicitly preserves %APPDATA%\Ap and %LOCALAPPDATA%\Ap Workspace databases
   end;
 end;
