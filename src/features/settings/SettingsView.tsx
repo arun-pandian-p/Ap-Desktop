@@ -482,9 +482,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div>
                     <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                       <span>{userProfile.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 font-mono font-semibold border border-cyan-200">
-                        Rank #{userProfile.rank}
-                      </span>
                     </h4>
                     <p className="text-xs text-gray-500 font-mono mt-0.5">@{userProfile.username} • {userProfile.email}</p>
                     <p className="text-[11px] text-gray-400 italic mt-0.5">"{userProfile.bio}"</p>

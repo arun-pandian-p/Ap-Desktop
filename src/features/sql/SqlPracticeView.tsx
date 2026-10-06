@@ -138,15 +138,36 @@ export const SqlPracticeView: React.FC = () => {
     setIsExecuting(false);
 
     if (res) {
+      const isPassed = Boolean(res.passed && !res.error);
       setHistory(prev => [
         {
           title: exercise.title,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          passed: Boolean(res.passed && !res.error),
+          passed: isPassed,
           duration: res.execution_ms,
         },
         ...prev.slice(0, 9),
       ]);
+
+      // Record to SQLite attempts database in real time
+      try {
+        const { recordSubmission } = await import('@/services/db');
+        await recordSubmission({
+          question_id: exercise.id,
+          problem_title: exercise.title,
+          difficulty: exercise.difficulty,
+          category: exercise.category,
+          problem_type: 'sql',
+          language: 'sql',
+          code: latestQuery,
+          status: isPassed ? 'Accepted' : (res.error ? 'Runtime Error' : 'Wrong Answer'),
+          runtime_ms: res.execution_ms,
+          test_cases_passed: isPassed ? 1 : 0,
+          total_test_cases: 1,
+        });
+      } catch (err) {
+        console.warn('Failed to record SQL submission:', err);
+      }
     }
   };
 

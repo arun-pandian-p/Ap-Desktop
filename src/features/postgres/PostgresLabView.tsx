@@ -229,6 +229,24 @@ SELECT * FROM employees;
     setResult(res);
     setQueryTabs(prev => prev.map(t => t.id === activeQueryTabId ? { ...t, query: latestQuery, result: res } : t));
     setIsExecuting(false);
+
+    try {
+      const { recordSubmission } = await import('@/services/db');
+      const curTab = queryTabs.find(t => t.id === activeQueryTabId);
+      await recordSubmission({
+        question_id: `pg-${activeQueryTabId}`,
+        problem_title: `PostgreSQL Lab (${curTab?.title || 'Query'})`,
+        difficulty: 'Medium',
+        category: 'PostgreSQL',
+        problem_type: 'postgres',
+        language: 'postgresql',
+        code: latestQuery,
+        status: res.success ? 'Accepted' : 'Runtime Error',
+        runtime_ms: durationMs,
+        test_cases_passed: res.success ? 1 : 0,
+        total_test_cases: 1,
+      });
+    } catch {}
   };
 
   const handleTableClick = (tblName: string) => {

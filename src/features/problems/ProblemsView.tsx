@@ -33,6 +33,8 @@ export const ProblemsView: React.FC<ProblemsViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 50;
 
+  const [kpiStats, setKpiStats] = useState({ total: 1337, solved: 90, inProgress: 3, notStarted: 1244 });
+
   const loadData = async () => {
     const res = await fetchQuestions({
       search,
@@ -43,7 +45,28 @@ export const ProblemsView: React.FC<ProblemsViewProps> = ({
     });
     setQuestions(res.questions);
     setTotal(res.total);
+
+    try {
+      const { fetchProfileStats } = await import('@/services/db');
+      const stats = await fetchProfileStats();
+      const tot = res.total || 1337;
+      setKpiStats({
+        total: tot,
+        solved: stats.totalSolved,
+        inProgress: stats.attemptingCount,
+        notStarted: Math.max(0, tot - stats.totalSolved - stats.attemptingCount),
+      });
+    } catch {}
   };
+
+  useEffect(() => {
+    window.addEventListener('ap_questions_updated', loadData);
+    window.addEventListener('ap_submissions_updated', loadData);
+    return () => {
+      window.removeEventListener('ap_questions_updated', loadData);
+      window.removeEventListener('ap_submissions_updated', loadData);
+    };
+  }, []);
 
   // Reset to page 1 when search or filters change
   useEffect(() => {
@@ -105,30 +128,30 @@ export const ProblemsView: React.FC<ProblemsViewProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-white p-3.5 rounded-xl border border-[#E8EAF2] shadow-2xs">
           <div className="text-xs font-medium text-gray-500">Total Curriculum</div>
-          <div className="text-xl font-black text-gray-900 mt-0.5">1,337</div>
+          <div className="text-xl font-black text-gray-900 mt-0.5">{kpiStats.total.toLocaleString()}</div>
           <div className="text-[10px] text-gray-400">Curated Problems</div>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-[#E8EAF2] shadow-2xs">
           <div className="text-xs font-medium text-emerald-600">Solved</div>
-          <div className="text-xl font-black text-emerald-600 mt-0.5">142</div>
-          <div className="text-[10px] text-emerald-600">10.6% Completion</div>
+          <div className="text-xl font-black text-emerald-600 mt-0.5">{kpiStats.solved.toLocaleString()}</div>
+          <div className="text-[10px] text-emerald-600">{Math.round((kpiStats.solved / Math.max(1, kpiStats.total)) * 100)}% Completion</div>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-[#E8EAF2] shadow-2xs">
           <div className="text-xs font-medium text-blue-600">In Progress</div>
-          <div className="text-xl font-black text-blue-600 mt-0.5">38</div>
+          <div className="text-xl font-black text-blue-600 mt-0.5">{kpiStats.inProgress.toLocaleString()}</div>
           <div className="text-[10px] text-blue-600">Active Attempts</div>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-[#E8EAF2] shadow-2xs">
           <div className="text-xs font-medium text-gray-500">Not Started</div>
-          <div className="text-xl font-black text-gray-600 mt-0.5">1,157</div>
+          <div className="text-xl font-black text-gray-600 mt-0.5">{kpiStats.notStarted.toLocaleString()}</div>
           <div className="text-[10px] text-gray-400">Remaining to Solve</div>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-[#E8EAF2] shadow-2xs flex flex-col justify-between">
           <div className="text-xs font-medium text-gray-500">Curriculum Progress</div>
           <div className="w-full bg-gray-100 rounded-full h-2 my-1">
-            <div className="bg-[#E11D26] h-2 rounded-full" style={{ width: '10.6%' }}></div>
+            <div className="bg-[#E11D26] h-2 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((kpiStats.solved / Math.max(1, kpiStats.total)) * 100))}%` }}></div>
           </div>
-          <div className="text-[10px] text-gray-400 font-medium">Goal: 300 problems</div>
+          <div className="text-[10px] text-gray-400 font-medium">{kpiStats.solved} of {kpiStats.total} completed</div>
         </div>
       </div>
 

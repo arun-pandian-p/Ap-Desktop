@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   User, 
   MapPin, 
@@ -8,7 +8,6 @@ import {
   Linkedin, 
   Twitter, 
   Award, 
-  Trophy, 
   Flame, 
   Camera, 
   Edit3, 
@@ -16,15 +15,44 @@ import {
   ChevronRight,
   TrendingUp,
   Calendar,
-  CheckCircle2
+  CheckCircle2,
+  Info,
+  Layers,
+  Code2,
+  Clock,
+  Check,
+  Eye,
+  MessageSquare
 } from 'lucide-react';
-import { UserProfile, ScreenId } from '@/types';
+import { UserProfile, ScreenId, ProfileStatsResult, HeatmapResult, SubmissionRecord, HeatmapDay } from '@/types';
 import { getUserProfile, saveUserProfile } from '@/services/profile';
+import { fetchProfileStats, fetchSubmissionHeatmap, fetchSubmissions } from '@/services/db';
 import { EditProfileModal } from '@/components/dialogs/EditProfileModal';
 
 interface ProfileViewProps {
   onNavigate?: (screen: ScreenId) => void;
   onShowToast?: (title: string, type?: 'success' | 'warning' | 'error' | 'info', body?: string) => void;
+}
+
+function formatRelativeTime(isoStr: string): string {
+  try {
+    const diffMs = Date.now() - new Date(isoStr).getTime();
+    if (diffMs < 0) return 'Just now';
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 30) return `${diffDays} days ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+    return '1 year ago';
+  } catch {
+    return 'Recently';
+  }
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -34,16 +62,69 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [profile, setProfile] = useState<UserProfile>(getUserProfile());
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Sync profile on mount and event
+  // SQLite-driven statistics & heatmap
+  const [dbStats, setDbStats] = useState<ProfileStatsResult>({
+    totalSolved: 90,
+    totalQuestions: 4073,
+    easySolved: 64,
+    easyTotal: 969,
+    mediumSolved: 23,
+    mediumTotal: 2124,
+    hardSolved: 3,
+    hardTotal: 980,
+    attemptingCount: 3,
+    totalSubmissions: 124,
+    totalActiveDays: 20,
+    currentStreak: 3,
+    longestStreak: 3,
+  });
+
+  const [selectedYear, setSelectedYear] = useState<number | 'current'>('current');
+  const [heatmapData, setHeatmapData] = useState<HeatmapResult | null>(null);
+  const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'recent_ac' | 'list' | 'solutions' | 'discuss'>('recent_ac');
+  const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
+
+  // Load real SQLite data
+  const loadDbData = async () => {
+    try {
+      const stats = await fetchProfileStats();
+      setDbStats(stats);
+
+      const hmap = await fetchSubmissionHeatmap(selectedYear);
+      setHeatmapData(hmap);
+
+      const subs = await fetchSubmissions({ limit: 40 });
+      setSubmissions(subs);
+    } catch (err) {
+      console.warn('Error loading profile DB data:', err);
+    }
+  };
+
   useEffect(() => {
+    loadDbData();
+
+    const handleUpdate = () => {
+      loadDbData();
+    };
+
     const handleProfileUpdate = (e: any) => {
       if (e.detail) {
         setProfile(e.detail);
       }
+      loadDbData();
     };
+
+    window.addEventListener('ap_submissions_updated', handleUpdate);
+    window.addEventListener('ap_questions_updated', handleUpdate);
     window.addEventListener('ap_profile_updated', handleProfileUpdate);
-    return () => window.removeEventListener('ap_profile_updated', handleProfileUpdate);
-  }, []);
+
+    return () => {
+      window.removeEventListener('ap_submissions_updated', handleUpdate);
+      window.removeEventListener('ap_questions_updated', handleUpdate);
+      window.removeEventListener('ap_profile_updated', handleProfileUpdate);
+    };
+  }, [selectedYear]);
 
   const handleSaveProfile = async (updated: UserProfile) => {
     const saved = await saveUserProfile(updated);
@@ -53,61 +134,41 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
-  // Generate 52 weeks of realistic heatmap data
-  const weeks = 52;
-  const daysPerWeek = 7;
-  // Seeded mock distribution for the 52-week activity
-  const heatmapData = React.useMemo(() => {
-    const grid: number[][] = [];
-    for (let w = 0; w < weeks; w++) {
-      const col: number[] = [];
-      for (let d = 0; d < daysPerWeek; d++) {
-        // High density activity simulating user's screenshot
-        const seed = (w * 7 + d * 13) % 100;
-        let level = 0;
-        if (seed > 85) level = 4;
-        else if (seed > 60) level = 3;
-        else if (seed > 35) level = 2;
-        else if (seed > 15) level = 1;
-        col.push(level);
-      }
-      grid.push(col);
-    }
-    return grid;
-  }, []);
-
   const getHeatmapColor = (level: number) => {
     switch (level) {
-      case 4: return 'bg-[#39D353]'; // Bright neon green
-      case 3: return 'bg-[#26A641]'; // Vibrant green
-      case 2: return 'bg-[#006D32]'; // Deep green
-      case 1: return 'bg-[#0E4429]'; // Subtle green
-      default: return 'bg-[#232733]'; // Inactive dark gray
+      case 4: return 'bg-[#39D353]'; // Bright neon green (10+ submissions)
+      case 3: return 'bg-[#26A641]'; // Vibrant green (6-9 submissions)
+      case 2: return 'bg-[#006D32]'; // Deep green (3-5 submissions)
+      case 1: return 'bg-[#0E4429]'; // Subtle green (1-2 submissions)
+      default: return 'bg-[#232733]'; // Inactive dark cell (0 submissions)
     }
   };
 
-  // Rating history points for SVG chart
-  const ratingPoints = [
-    { x: 20, y: 70 },
-    { x: 50, y: 72 },
-    { x: 70, y: 75 },
-    { x: 100, y: 71 },
-    { x: 130, y: 70 },
-    { x: 170, y: 69 },
-    { x: 210, y: 68 },
-    { x: 240, y: 68 },
-    { x: 270, y: 67 },
-    { x: 300, y: 65 },
-    { x: 330, y: 60 },
-    { x: 350, y: 55 },
-    { x: 370, y: 50 },
-    { x: 390, y: 46 },
-    { x: 410, y: 42 },
+  const recentAcList = useMemo(() => {
+    return submissions.filter(s => s.status === 'Accepted');
+  }, [submissions]);
+
+  // Compute month positions for the 52 columns
+  const monthLabels = [
+    { label: 'Oct', col: 0 },
+    { label: 'Nov', col: 4 },
+    { label: 'Dec', col: 9 },
+    { label: 'Jan', col: 13 },
+    { label: 'Feb', col: 17 },
+    { label: 'Mar', col: 22 },
+    { label: 'Apr', col: 26 },
+    { label: 'May', col: 30 },
+    { label: 'Jun', col: 35 },
+    { label: 'Jul', col: 39 },
+    { label: 'Aug', col: 43 },
+    { label: 'Sep', col: 48 },
   ];
 
-  const svgPathD = ratingPoints.reduce((acc, pt, idx) => {
-    return `${acc} ${idx === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`;
-  }, '');
+  // Circle gauge calculations
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius; // ~263.89
+  const solveRatio = Math.min(1, dbStats.totalSolved / Math.max(1, dbStats.totalQuestions));
+  const strokeDashoffset = circumference * (1 - solveRatio);
 
   return (
     <div className="h-full overflow-y-auto bg-[#0C0E14] text-[#E6EAF5] p-6 font-sans select-none">
@@ -135,10 +196,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </button>
         </div>
 
-        {/* Main 2-Column Grid matching 2nd uploaded image */}
+        {/* Main 2-Column Grid matching LeetCode Profile Reference */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* LEFT CARD: User Identity & Bio & Socials (4 Cols) */}
+          {/* ======================================================== */}
+          {/* LEFT CARD: User Identity, Bio, Socials & Community Stats */}
+          {/* Rank is COMPLETELY REMOVED as requested                  */}
+          {/* ======================================================== */}
           <div className="lg:col-span-4 bg-[#181A22] rounded-2xl border border-[#262A38] p-6 flex flex-col justify-between shadow-xl">
             <div className="space-y-5">
               {/* Profile Photo & Names */}
@@ -167,32 +231,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     {profile.name}
                   </h2>
                   <p className="text-xs text-gray-400 font-mono truncate">
-                    @{profile.username}
+                    {profile.username}
                   </p>
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#252A38] text-[11px] font-mono text-cyan-400 border border-[#31374A]">
-                    <span>Rank :</span>
-                    <strong className="text-white">{profile.rank}</strong>
+                  
+                  {/* Followers / Following row (matching screenshot) */}
+                  <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
+                    <span><strong className="text-white">3</strong> Following</span>
+                    <span>•</span>
+                    <span><strong className="text-white">0</strong> Followers</span>
                   </div>
                 </div>
               </div>
 
-              {/* Bio */}
-              <div className="text-xs text-gray-300 italic leading-relaxed bg-[#1E212B] p-3 rounded-xl border border-[#2A2E3D]">
-                "{profile.bio || 'Insanely mad about coding'}"
-              </div>
+              {/* Edit Profile Button (Green border button matching LeetCode screenshot) */}
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="w-full py-2 bg-[#1C2C24] hover:bg-[#23382D] text-[#34D399] border border-[#2B4738] rounded-xl text-xs font-bold transition-all cursor-pointer text-center"
+              >
+                Edit Profile
+              </button>
 
-              {/* Identity Details */}
+              {/* Bio & Details */}
               <div className="space-y-2.5 text-xs text-gray-300">
                 {profile.location && (
                   <div className="flex items-center gap-2.5">
                     <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="truncate">{profile.location}</span>
-                  </div>
-                )}
-                {profile.institution && (
-                  <div className="flex items-center gap-2.5">
-                    <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
-                    <span className="truncate">{profile.institution}</span>
                   </div>
                 )}
                 {profile.website && (
@@ -211,7 +275,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 {profile.github && (
                   <div className="flex items-center gap-2.5">
                     <Github className="w-4 h-4 text-gray-400 shrink-0" />
-                    <span className="truncate font-mono">{profile.github}</span>
+                    <a 
+                      href={`https://github.com/${profile.github}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate font-mono text-gray-300 hover:text-white"
+                    >
+                      {profile.github}
+                    </a>
                   </div>
                 )}
                 {profile.linkedin && (
@@ -220,134 +291,145 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     <span className="truncate font-mono">{profile.linkedin}</span>
                   </div>
                 )}
-                {profile.twitter && (
-                  <div className="flex items-center gap-2.5">
-                    <Twitter className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span className="truncate font-mono">@{profile.twitter}</span>
-                  </div>
-                )}
               </div>
 
-              {/* Skills Tags */}
-              <div>
+              {/* Community Stats (matching LeetCode left card) */}
+              <div className="pt-4 border-t border-[#262A38] space-y-2">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                  Technical Skills
+                  Community Stats
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.skills.map((skill, idx) => (
-                    <span 
-                      key={idx}
-                      className="px-2 py-0.5 rounded-md bg-[#252A3A] border border-[#31374C] text-[11px] font-mono text-gray-300"
-                    >
-                      {skill}
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="flex items-center gap-2 text-gray-400">
+                      <Eye className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Views</span>
                     </span>
-                  ))}
+                    <span className="font-mono text-gray-300 font-bold">0</span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="flex items-center gap-2 text-gray-400">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Solution</span>
+                    </span>
+                    <span className="font-mono text-gray-300 font-bold">0</span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="flex items-center gap-2 text-gray-400">
+                      <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Discuss</span>
+                    </span>
+                    <span className="font-mono text-gray-300 font-bold">0</span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="flex items-center gap-2 text-gray-400">
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Reputation</span>
+                    </span>
+                    <span className="font-mono text-gray-300 font-bold">0</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="mt-6 w-full py-2 bg-[#252A3A] hover:bg-[#2D3346] text-gray-200 text-xs font-semibold rounded-xl border border-[#31374C] transition-colors cursor-pointer text-center"
-            >
-              Edit Profile Settings
-            </button>
+            </div>
           </div>
 
-          {/* RIGHT COLUMN: Solved Stats + Contest Rating (8 Cols) */}
-          <div className="lg:col-span-8 space-y-6">
+          {/* ======================================================== */}
+          {/* RIGHT TOP: Problems Solved Dial & Badges Card            */}
+          {/* ======================================================== */}
+          <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-6">
             
-            {/* CARD 2: Problems Solved Dial & Category Progress */}
-            <div className="bg-[#181A22] rounded-2xl border border-[#262A38] p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-mono text-gray-400">@{profile.username}</span>
-                <span className="text-xs font-mono text-gray-500">#{profile.rank}</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                {/* Circular Radial Gauge */}
-                <div className="md:col-span-5 flex flex-col items-center justify-center">
+            {/* CARD 1: Problems Solved Radial Dial (8 cols) */}
+            <div className="md:col-span-8 bg-[#181A22] rounded-2xl border border-[#262A38] p-6 shadow-xl flex flex-col justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
+                {/* Circular Gauge */}
+                <div className="sm:col-span-5 flex flex-col items-center justify-center">
                   <div className="relative w-36 h-36 flex items-center justify-center">
-                    {/* SVG Gauge Circles */}
                     <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      {/* Background circle */}
+                      {/* Background track */}
                       <circle
                         cx="50"
                         cy="50"
-                        r="40"
+                        r={radius}
                         stroke="#262A38"
-                        strokeWidth="8"
+                        strokeWidth="7"
                         fill="transparent"
                       />
-                      {/* Progress arc */}
+                      {/* Dynamic Solved Arc */}
                       <circle
                         cx="50"
                         cy="50"
-                        r="40"
+                        r={radius}
                         stroke="#F59E0B"
-                        strokeWidth="8"
-                        strokeDasharray={251.2}
-                        strokeDashoffset={251.2 * (1 - 0.72)}
+                        strokeWidth="7"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
                         strokeLinecap="round"
                         fill="transparent"
                       />
                     </svg>
 
                     <div className="absolute text-center">
-                      <div className="text-3xl font-extrabold text-white font-mono">
-                        {profile.solved.total}
+                      <div className="text-2xl font-black text-white font-mono">
+                        {dbStats.totalSolved}
+                        <span className="text-xs text-gray-500 font-normal">/{dbStats.totalQuestions}</span>
                       </div>
-                      <div className="text-[11px] text-gray-400 font-medium">solved</div>
+                      <div className="text-[11px] text-emerald-400 font-semibold flex items-center justify-center gap-1 mt-0.5">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Solved</span>
+                      </div>
+                      <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                        {dbStats.attemptingCount} Attempting
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Category Progress Bars */}
-                <div className="md:col-span-7 space-y-3.5 font-sans">
+                {/* Difficulty Bars */}
+                <div className="sm:col-span-7 space-y-3 font-sans">
                   {/* Easy */}
-                  <div>
+                  <div className="bg-[#141720] p-2.5 rounded-xl border border-[#222736]">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-emerald-400 font-semibold">Easy</span>
-                      <span className="font-mono text-gray-300">
-                        <strong>{profile.solved.easy}</strong> <span className="text-gray-500">/{profile.solved.easyTotal}</span>
+                      <span className="text-teal-400 font-bold">Easy</span>
+                      <span className="font-mono text-gray-200 text-xs">
+                        <strong>{dbStats.easySolved}</strong> <span className="text-gray-500">/{dbStats.easyTotal}</span>
                       </span>
                     </div>
-                    <div className="h-2 rounded-full bg-[#262A38] overflow-hidden">
+                    <div className="h-1.5 rounded-full bg-[#262A38] overflow-hidden">
                       <div 
-                        className="h-full bg-emerald-500 rounded-full"
-                        style={{ width: `${(profile.solved.easy / profile.solved.easyTotal) * 100}%` }}
+                        className="h-full bg-teal-400 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, (dbStats.easySolved / Math.max(1, dbStats.easyTotal)) * 100)}%` }}
                       />
                     </div>
                   </div>
 
                   {/* Medium */}
-                  <div>
+                  <div className="bg-[#141720] p-2.5 rounded-xl border border-[#222736]">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-amber-400 font-semibold">Medium</span>
-                      <span className="font-mono text-gray-300">
-                        <strong>{profile.solved.medium}</strong> <span className="text-gray-500">/{profile.solved.mediumTotal}</span>
+                      <span className="text-amber-400 font-bold">Med.</span>
+                      <span className="font-mono text-gray-200 text-xs">
+                        <strong>{dbStats.mediumSolved}</strong> <span className="text-gray-500">/{dbStats.mediumTotal}</span>
                       </span>
                     </div>
-                    <div className="h-2 rounded-full bg-[#262A38] overflow-hidden">
+                    <div className="h-1.5 rounded-full bg-[#262A38] overflow-hidden">
                       <div 
-                        className="h-full bg-amber-500 rounded-full"
-                        style={{ width: `${(profile.solved.medium / profile.solved.mediumTotal) * 100}%` }}
+                        className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, (dbStats.mediumSolved / Math.max(1, dbStats.mediumTotal)) * 100)}%` }}
                       />
                     </div>
                   </div>
 
                   {/* Hard */}
-                  <div>
+                  <div className="bg-[#141720] p-2.5 rounded-xl border border-[#222736]">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-red-400 font-semibold">Hard</span>
-                      <span className="font-mono text-gray-300">
-                        <strong>{profile.solved.hard}</strong> <span className="text-gray-500">/{profile.solved.hardTotal}</span>
+                      <span className="text-red-400 font-bold">Hard</span>
+                      <span className="font-mono text-gray-200 text-xs">
+                        <strong>{dbStats.hardSolved}</strong> <span className="text-gray-500">/{dbStats.hardTotal}</span>
                       </span>
                     </div>
-                    <div className="h-2 rounded-full bg-[#262A38] overflow-hidden">
+                    <div className="h-1.5 rounded-full bg-[#262A38] overflow-hidden">
                       <div 
-                        className="h-full bg-red-500 rounded-full"
-                        style={{ width: `${(profile.solved.hard / profile.solved.hardTotal) * 100}%` }}
+                        className="h-full bg-red-400 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, (dbStats.hardSolved / Math.max(1, dbStats.hardTotal)) * 100)}%` }}
                       />
                     </div>
                   </div>
@@ -355,109 +437,254 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
             </div>
 
-            {/* CARD 3: Contest Rating & Rankings */}
-            <div className="bg-[#181A22] rounded-2xl border border-[#262A38] p-6 shadow-xl">
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div>
-                  <div className="text-[11px] text-gray-400 font-medium">Contest Rating</div>
-                  <div className="text-2xl font-extrabold text-cyan-400 font-mono mt-0.5">
-                    {profile.contestRating}
-                  </div>
+            {/* CARD 2: Badges Card (4 cols, matching LeetCode screenshot) */}
+            <div className="md:col-span-4 bg-[#181A22] rounded-2xl border border-[#262A38] p-6 shadow-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs mb-3">
+                  <span className="text-gray-400 font-medium">Badges</span>
+                  <span className="font-bold text-white font-mono flex items-center gap-1">
+                    <span>2</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                  </span>
                 </div>
-                <div>
-                  <div className="text-[11px] text-gray-400 font-medium">Global Ranking</div>
-                  <div className="text-xs font-bold text-gray-200 font-mono mt-1">
-                    <span className="text-cyan-400 font-extrabold text-sm">{profile.globalRanking.split(' ')[0]}</span>
-                    <span className="text-gray-500 text-[10px]"> {profile.globalRanking.split(' ').slice(1).join(' ')}</span>
+
+                {/* Badge Icons */}
+                <div className="flex items-center gap-4 py-2">
+                  {/* Badge 1: Pandas (PD) */}
+                  <div className="flex flex-col items-center gap-1 group cursor-pointer" title="Pandas Badge">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-950 to-purple-900 border border-indigo-700/60 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                      <span className="font-mono font-black text-indigo-300 text-sm tracking-tighter">PD</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-gray-400 font-medium">Attended</div>
-                  <div className="text-2xl font-extrabold text-cyan-400 font-mono mt-0.5">
-                    {profile.attendedContests}
+
+                  {/* Badge 2: SQL */}
+                  <div className="flex flex-col items-center gap-1 group cursor-pointer" title="SQL Practice Badge">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-950 to-cyan-900 border border-cyan-700/60 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                      <span className="font-mono font-black text-cyan-300 text-xs">SQL</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Progression Line Chart */}
-              <div className="pt-2">
-                <div className="relative h-24 w-full">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 440 90">
-                    {/* Trend Line */}
-                    <path
-                      d={svgPathD}
-                      fill="none"
-                      stroke="#F59E0B"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                    {/* Points */}
-                    {ratingPoints.map((pt, i) => (
-                      <circle
-                        key={i}
-                        cx={pt.x}
-                        cy={pt.y}
-                        r="2.5"
-                        fill="#F59E0B"
-                        className="transition-transform hover:scale-150"
-                      />
-                    ))}
-                  </svg>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono pt-1">
-                  <span>2022</span>
-                  <span>2023</span>
-                  <span>2024</span>
-                  <span>2025</span>
-                </div>
+              <div className="pt-3 border-t border-[#262A38] text-[11px] text-gray-400">
+                <div className="text-gray-500 text-[10px]">Most Recent Badge</div>
+                <div className="font-bold text-gray-200 mt-0.5">Top SQL 50</div>
               </div>
             </div>
 
           </div>
         </div>
 
-        {/* CARD 4: Heatmap (Last 52 Weeks) - Full Width at Bottom */}
+        {/* ======================================================== */}
+        {/* MIDDLE SECTION: Real-time Heatmap & Streaks from SQLite  */}
+        {/* ======================================================== */}
         <div className="bg-[#181A22] rounded-2xl border border-[#262A38] p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">Heatmap (Last 52 Weeks)</h3>
+              <h3 className="text-sm font-bold text-white">
+                <strong className="text-white font-mono">{dbStats.totalSubmissions}</strong> submissions in the past one year
+              </h3>
+              <Info className="w-3.5 h-3.5 text-gray-500" />
             </div>
-            <div className="flex items-center gap-4 text-xs font-mono text-gray-400">
-              <span>Active Days: <strong className="text-white">312</strong></span>
-              <span>Longest Streak: <strong className="text-emerald-400">42 Days</strong></span>
+
+            <div className="flex items-center gap-5 text-xs font-mono text-gray-400">
+              <span>Total active days: <strong className="text-white">{dbStats.totalActiveDays}</strong></span>
+              <span>Max streak: <strong className="text-emerald-400">{dbStats.longestStreak}</strong></span>
+              <span>Current streak: <strong className="text-amber-400">{dbStats.currentStreak}</strong></span>
+              
+              {/* Year Dropdown */}
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedYear(val === 'current' ? 'current' : Number(val));
+                }}
+                className="bg-[#202432] border border-[#2E3547] text-gray-200 text-xs rounded-lg px-2.5 py-1 focus:outline-hidden cursor-pointer"
+              >
+                <option value="current">Current</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+              </select>
             </div>
           </div>
 
-          {/* 52-Column Activity Grid */}
-          <div className="overflow-x-auto pb-2">
-            <div className="flex gap-1 min-w-[720px] justify-between">
-              {heatmapData.map((week, wIdx) => (
+          {/* 52-Column Calendar Grid */}
+          <div className="relative overflow-x-auto pb-2">
+            <div className="flex gap-1 min-w-[760px]">
+              {(heatmapData?.weeks || []).map((week, wIdx) => (
                 <div key={wIdx} className="flex flex-col gap-1">
-                  {week.map((level, dIdx) => (
+                  {week.map((day, dIdx) => (
                     <div
                       key={dIdx}
-                      className={`w-2.5 h-2.5 rounded-2xs transition-colors hover:ring-1 hover:ring-white ${getHeatmapColor(level)}`}
-                      title={`Week ${wIdx + 1}, Day ${dIdx + 1}: ${level * 3} activities`}
+                      onMouseEnter={(e) => {
+                        if (day.date) {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredDay({ date: day.date, count: day.count, x: rect.left, y: rect.top });
+                        }
+                      }}
+                      onMouseLeave={() => setHoveredDay(null)}
+                      className={`w-2.5 h-2.5 rounded-2xs transition-colors hover:ring-1 hover:ring-white ${
+                        day.date ? getHeatmapColor(day.level) : 'bg-transparent'
+                      }`}
                     />
                   ))}
                 </div>
               ))}
             </div>
 
+            {/* Month Labels along bottom */}
+            <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-2 min-w-[760px] px-1 select-none">
+              {monthLabels.map((m, idx) => (
+                <span key={idx}>{m.label}</span>
+              ))}
+            </div>
+
+            {/* Legend */}
             <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono mt-3 px-1">
-              <span>2/25/2024</span>
+              <span>Past 12 Months Activity</span>
               <div className="flex items-center gap-1.5 text-[10px]">
                 <span>Less</span>
-                <div className="w-2 h-2 rounded-2xs bg-[#232733]" />
-                <div className="w-2 h-2 rounded-2xs bg-[#0E4429]" />
-                <div className="w-2 h-2 rounded-2xs bg-[#006D32]" />
-                <div className="w-2 h-2 rounded-2xs bg-[#26A641]" />
-                <div className="w-2 h-2 rounded-2xs bg-[#39D353]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#232733]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#0E4429]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#006D32]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#26A641]" />
+                <div className="w-2.5 h-2.5 rounded-2xs bg-[#39D353]" />
                 <span>More</span>
               </div>
-              <span>2/27/2025</span>
             </div>
+          </div>
+
+          {/* Hover Tooltip */}
+          {hoveredDay && (
+            <div 
+              className="fixed z-50 px-2.5 py-1 bg-black/90 border border-gray-700 text-[11px] font-mono text-white rounded-md shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full mb-1.5"
+              style={{ left: hoveredDay.x + 5, top: hoveredDay.y - 4 }}
+            >
+              {hoveredDay.count} submissions on {hoveredDay.date}
+            </div>
+          )}
+        </div>
+
+        {/* ======================================================== */}
+        {/* BOTTOM SECTION: Submissions Tabs (Recent AC / List)     */}
+        {/* ======================================================== */}
+        <div className="bg-[#181A22] rounded-2xl border border-[#262A38] overflow-hidden shadow-xl">
+          {/* Tabs Header Bar */}
+          <div className="border-b border-[#262A38] px-6 pt-3 flex items-center justify-between bg-[#151720]">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveSubTab('recent_ac')}
+                className={`pb-3 px-3 border-b-2 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeSubTab === 'recent_ac' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Recent AC</span>
+              </button>
+
+              <button
+                onClick={() => setActiveSubTab('list')}
+                className={`pb-3 px-3 border-b-2 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeSubTab === 'list' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-blue-400" />
+                <span>List</span>
+              </button>
+
+              <button
+                onClick={() => setActiveSubTab('solutions')}
+                className={`pb-3 px-3 border-b-2 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeSubTab === 'solutions' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>Solutions</span>
+              </button>
+
+              <button
+                onClick={() => setActiveSubTab('discuss')}
+                className={`pb-3 px-3 border-b-2 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeSubTab === 'discuss' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                <span>Discuss</span>
+              </button>
+            </div>
+
+            <div className="text-xs text-gray-400 font-mono pb-3">
+              Total {activeSubTab === 'recent_ac' ? recentAcList.length : submissions.length} records
+            </div>
+          </div>
+
+          {/* Submissions List Content */}
+          <div className="divide-y divide-[#222634] max-h-96 overflow-y-auto">
+            {activeSubTab === 'recent_ac' ? (
+              recentAcList.length > 0 ? (
+                recentAcList.map((sub) => (
+                  <div key={sub.id} className="p-4 hover:bg-[#1C1F2B] transition-colors flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="font-bold text-white hover:text-[#E11D26] cursor-pointer">
+                        {sub.problem_title}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        sub.difficulty === 'Easy'
+                          ? 'bg-emerald-950/70 text-emerald-400 border-emerald-800/80'
+                          : sub.difficulty === 'Medium'
+                          ? 'bg-amber-950/70 text-amber-400 border-amber-800/80'
+                          : 'bg-red-950/70 text-red-400 border-red-800/80'
+                      }`}>
+                        {sub.difficulty}
+                      </span>
+                      <span className="font-mono text-[10px] text-gray-400 uppercase bg-[#202534] px-1.5 py-0.5 rounded">
+                        {sub.language}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-gray-400 font-mono text-[11px]">
+                      {(sub.runtime_ms ?? 0) > 0 && <span>{sub.runtime_ms} ms</span>}
+                      <span>{formatRelativeTime(sub.created_at)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-10 text-center text-gray-500 font-mono text-xs">
+                  No accepted submissions yet. Solve problems in Python or SQL Practice to see them here!
+                </div>
+              )
+            ) : activeSubTab === 'list' ? (
+              submissions.length > 0 ? (
+                submissions.map((sub) => (
+                  <div key={sub.id} className="p-4 hover:bg-[#1C1F2B] transition-colors flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${sub.status === 'Accepted' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                      <div className="font-bold text-white hover:text-[#E11D26] cursor-pointer">
+                        {sub.problem_title}
+                      </div>
+                      <span className={`text-[10px] font-bold ${sub.status === 'Accepted' ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {sub.status}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-gray-400 font-mono text-[11px]">
+                      <span className="uppercase text-[10px]">{sub.language}</span>
+                      <span>{formatRelativeTime(sub.created_at)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-10 text-center text-gray-500 font-mono text-xs">
+                  No submissions recorded yet.
+                </div>
+              )
+            ) : (
+              <div className="p-10 text-center text-gray-400 text-xs">
+                {activeSubTab === 'solutions' 
+                  ? 'Your shared solution templates and editorial notes will appear here.'
+                  : 'Join the developer community discussion on algorithmic trade-offs.'}
+              </div>
+            )}
           </div>
         </div>
 

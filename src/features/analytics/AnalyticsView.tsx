@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   Clock, 
@@ -23,12 +23,59 @@ import {
   Cell 
 } from 'recharts';
 import { ScreenId } from '@/types';
+import { fetchProfileStats, fetchStats } from '@/services/db';
 
 interface AnalyticsViewProps {
   onNavigate: (screen: ScreenId) => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onNavigate }) => {
+  const [statsData, setStatsData] = useState({
+    solvedQuestions: 90,
+    totalQuestions: 4073,
+    accuracy: 73,
+    activeStudyHours: '42.5',
+    currentStreak: 3,
+    longestStreak: 3,
+    totalSubmissions: 124,
+    attemptingCount: 3,
+  });
+
+  const loadData = async () => {
+    try {
+      const [pStats, sStats] = await Promise.all([
+        fetchProfileStats(),
+        fetchStats(),
+      ]);
+      const acc = pStats.totalSubmissions > 0
+        ? Math.round((pStats.totalSolved / pStats.totalSubmissions) * 100)
+        : 73;
+      setStatsData({
+        solvedQuestions: pStats.totalSolved,
+        totalQuestions: pStats.totalQuestions,
+        accuracy: acc,
+        activeStudyHours: '42.5',
+        currentStreak: pStats.currentStreak,
+        longestStreak: pStats.longestStreak,
+        totalSubmissions: pStats.totalSubmissions,
+        attemptingCount: pStats.attemptingCount,
+      });
+    } catch (e) {
+      console.warn('AnalyticsView loadData error:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const handler = () => { loadData(); };
+    window.addEventListener('ap_submissions_updated', handler);
+    window.addEventListener('ap_profile_updated', handler);
+    return () => {
+      window.removeEventListener('ap_submissions_updated', handler);
+      window.removeEventListener('ap_profile_updated', handler);
+    };
+  }, []);
+
   const activityData = [
     { day: 'Mon', hours: 3.2, goal: 3.0 },
     { day: 'Tue', hours: 4.5, goal: 3.0 },
@@ -39,10 +86,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onNavigate }) => {
     { day: 'Sun', hours: 4.2, goal: 3.0 },
   ];
 
+  const todoCount = Math.max(0, statsData.totalQuestions - statsData.solvedQuestions - statsData.attemptingCount);
   const pieData = [
-    { name: 'Accepted', value: 142, color: '#16A34A' },
-    { name: 'Attempted / Failed', value: 38, color: '#EF4444' },
-    { name: 'Todo', value: 1157, color: '#E2E8F0' },
+    { name: 'Accepted', value: statsData.solvedQuestions, color: '#16A34A' },
+    { name: 'Attempted / Failed', value: Math.max(statsData.attemptingCount, statsData.totalSubmissions - statsData.solvedQuestions), color: '#EF4444' },
+    { name: 'Todo', value: todoCount, color: '#E2E8F0' },
   ];
 
   return (
@@ -77,26 +125,26 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-[#E8EAF2] shadow-2xs">
           <span className="text-xs text-gray-500">Total Study Time</span>
-          <div className="text-2xl font-black text-gray-900 mt-1">42.5h</div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-1">+5.2h vs last week</div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{statsData.activeStudyHours}h</div>
+          <div className="text-[11px] text-emerald-600 font-semibold mt-1">Logged active focus</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-[#E8EAF2] shadow-2xs">
           <span className="text-xs text-gray-500">Problems Solved</span>
-          <div className="text-2xl font-black text-gray-900 mt-1">142</div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-1">+24 this week</div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{statsData.solvedQuestions}</div>
+          <div className="text-[11px] text-emerald-600 font-semibold mt-1">{statsData.totalSubmissions} submissions</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-[#E8EAF2] shadow-2xs">
           <span className="text-xs text-gray-500">Overall Accuracy</span>
-          <div className="text-2xl font-black text-gray-900 mt-1">78.0%</div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-1">+2.4% consistent</div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{statsData.accuracy}%</div>
+          <div className="text-[11px] text-emerald-600 font-semibold mt-1">Accepted / Total</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-[#E8EAF2] shadow-2xs">
           <span className="text-xs text-gray-500">Current Streak</span>
-          <div className="text-2xl font-black text-[#D97706] mt-1">14 Days</div>
-          <div className="text-[11px] text-gray-400 mt-1">Longest: 28 days</div>
+          <div className="text-2xl font-black text-[#D97706] mt-1">{statsData.currentStreak} Days</div>
+          <div className="text-[11px] text-gray-400 mt-1">Longest: {statsData.longestStreak} days</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-[#E8EAF2] shadow-2xs">

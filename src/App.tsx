@@ -76,14 +76,23 @@ export const App: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Initial load
+  // Initial load and real-time stats listener
   useEffect(() => {
+    const refreshStats = async () => {
+      try {
+        const loadedStats = await fetchStats();
+        setStats(loadedStats);
+      } catch {}
+    };
+
     getDatabase().then(async () => {
       const loadedTasks = await fetchTasks();
       setTasks(loadedTasks);
-      const loadedStats = await fetchStats();
-      setStats(loadedStats);
+      refreshStats();
     });
+
+    window.addEventListener('ap_submissions_updated', refreshStats);
+    return () => window.removeEventListener('ap_submissions_updated', refreshStats);
   }, []);
 
   // Sync theme changes with DOM and localStorage

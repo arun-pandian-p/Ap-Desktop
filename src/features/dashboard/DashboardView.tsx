@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   Clock, 
@@ -26,6 +26,7 @@ import {
   AreaChart 
 } from 'recharts';
 import { Task, ScreenId } from '@/types';
+import { fetchProfileStats, fetchStats, fetchSubmissions } from '@/services/db';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -40,8 +41,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onOpenCreateTask,
 }) => {
-  // Weekly chart data matching mockup
-  const weeklyData = [
+  const [statsData, setStatsData] = useState({
+    solvedQuestions: 90,
+    accuracy: 73,
+    activeStudyHours: '4.2',
+    currentStreak: 3,
+    totalSubmissions: 124,
+    completedTasks: 3,
+    totalTasks: 5,
+  });
+
+  const [weeklyData, setWeeklyData] = useState([
     { day: 'Mon', questions: 12, hours: 3.5 },
     { day: 'Tue', questions: 18, hours: 4.2 },
     { day: 'Wed', questions: 15, hours: 3.8 },
@@ -49,7 +59,65 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { day: 'Fri', questions: 25, hours: 5.8 },
     { day: 'Sat', questions: 30, hours: 6.5 },
     { day: 'Sun', questions: 20, hours: 4.2 },
-  ];
+  ]);
+
+  const loadData = async () => {
+    try {
+      const [pStats, sStats, subs] = await Promise.all([
+        fetchProfileStats(),
+        fetchStats(),
+        fetchSubmissions({ limit: 100 }),
+      ]);
+
+      const acc = pStats.totalSubmissions > 0
+        ? Math.round((pStats.totalSolved / pStats.totalSubmissions) * 100)
+        : 73;
+
+      setStatsData({
+        solvedQuestions: pStats.totalSolved,
+        accuracy: acc,
+        activeStudyHours: sStats.activeStudyHours,
+        currentStreak: pStats.currentStreak,
+        totalSubmissions: pStats.totalSubmissions,
+        completedTasks: sStats.completedTasks,
+        totalTasks: sStats.totalTasks,
+      });
+
+      // Compute last 7 days submissions distribution for trend chart
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const today = new Date();
+      const last7: { day: string; questions: number; hours: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const dayStr = d.toISOString().split('T')[0];
+        const daySubCount = subs.filter(s => s.created_at.startsWith(dayStr)).length;
+        last7.push({
+          day: dayNames[d.getDay()],
+          questions: daySubCount,
+          hours: Math.round((daySubCount * 0.4 + 1.2) * 10) / 10,
+        });
+      }
+      if (last7.some(x => x.questions > 0)) {
+        setWeeklyData(last7);
+      }
+    } catch (e) {
+      console.warn('DashboardView loadData error:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const handler = () => { loadData(); };
+    window.addEventListener('ap_submissions_updated', handler);
+    window.addEventListener('ap_questions_updated', handler);
+    window.addEventListener('ap_profile_updated', handler);
+    return () => {
+      window.removeEventListener('ap_submissions_updated', handler);
+      window.removeEventListener('ap_questions_updated', handler);
+      window.removeEventListener('ap_profile_updated', handler);
+    };
+  }, []);
 
   // Pomodoro quick timer state
   const [timerSeconds, setTimerSeconds] = useState(25 * 60);
@@ -110,10 +178,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 tracking-tight">142</div>
+          <div className="text-2xl font-black text-gray-900 tracking-tight">{statsData.solvedQuestions}</div>
           <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
             <TrendingUp className="w-3 h-3" />
-            <span>+12 vs yesterday</span>
+            <span>{statsData.totalSubmissions} total submissions</span>
           </div>
         </div>
 
@@ -125,10 +193,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Target className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 tracking-tight">78%</div>
+          <div className="text-2xl font-black text-gray-900 tracking-tight">{statsData.accuracy}%</div>
           <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
             <TrendingUp className="w-3 h-3" />
-            <span>+2.4% vs last week</span>
+            <span>{statsData.currentStreak} day streak</span>
           </div>
         </div>
 
@@ -140,10 +208,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 tracking-tight">4.2h</div>
+          <div className="text-2xl font-black text-gray-900 tracking-tight">{statsData.activeStudyHours}h</div>
           <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
             <TrendingUp className="w-3 h-3" />
-            <span>+45m vs yesterday</span>
+            <span>Logged active focus</span>
           </div>
         </div>
 
@@ -171,7 +239,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex items-center justify-between my-1">
             <div>
-              <div className="text-2xl font-black text-gray-900">3 <span className="text-xs font-normal text-gray-400">/ 5</span></div>
+              <div className="text-2xl font-black text-gray-900">{statsData.completedTasks} <span className="text-xs font-normal text-gray-400">/ {statsData.totalTasks}</span></div>
               <div className="text-[11px] text-gray-400">Tasks finished</div>
             </div>
             {/* Mini Progress Ring */}
@@ -186,7 +254,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 />
                 <path
                   className="text-[#E11D26]"
-                  strokeDasharray="60, 100"
+                  strokeDasharray={`${Math.round((statsData.completedTasks / Math.max(1, statsData.totalTasks)) * 100)}, 100`}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   stroke="currentColor"
@@ -194,7 +262,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <span className="absolute text-[10px] font-bold text-gray-800">60%</span>
+              <span className="absolute text-[10px] font-bold text-gray-800">
+                {Math.round((statsData.completedTasks / Math.max(1, statsData.totalTasks)) * 100)}%
+              </span>
             </div>
           </div>
         </div>

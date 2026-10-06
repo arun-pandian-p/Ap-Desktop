@@ -85,6 +85,7 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
   };
 
   const details = getProblemDetails(activeProblem);
+  const [problemSubmissions, setProblemSubmissions] = useState<any[]>([]);
 
   // Sync starter code when active question changes
   useEffect(() => {
@@ -92,6 +93,20 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
     editorRef.current?.setValue(details.starterCode);
     setRunResult(null);
     setSelectedCaseIdx(0);
+  }, [activeProblem.id]);
+
+  // Load persistent SQLite submissions for active question
+  useEffect(() => {
+    async function fetchSubs() {
+      try {
+        const { fetchSubmissions } = await import('@/services/db');
+        const list = await fetchSubmissions({ questionId: activeProblem.id });
+        setProblemSubmissions(list);
+      } catch {}
+    }
+    fetchSubs();
+    window.addEventListener('ap_submissions_updated', fetchSubs);
+    return () => window.removeEventListener('ap_submissions_updated', fetchSubs);
   }, [activeProblem.id]);
 
   const handlePrevProblem = () => {
@@ -118,6 +133,29 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
     const result = await executePythonCode(currentCode, details.testCases);
     setRunResult(result);
     setIsRunning(false);
+
+    try {
+      const { recordSubmission } = await import('@/services/db');
+      await recordSubmission({
+        question_id: activeProblem.id,
+        problem_title: activeProblem.title,
+        difficulty: activeProblem.difficulty,
+        category: activeProblem.pattern_name,
+        problem_type: 'python',
+        language: 'python',
+        code: currentCode,
+        status: result.status,
+        runtime_ms: result.runtime_ms,
+        memory_kb: result.memory_kb,
+        test_cases_passed: result.test_cases_passed,
+        total_test_cases: result.total_test_cases,
+      });
+      if (result.status === 'Accepted') {
+        setAllQuestions(prev => prev.map(q => q.id === activeProblem.id ? { ...q, status: 'solved' } : q));
+      }
+    } catch (e) {
+      console.warn('Failed to record submission:', e);
+    }
   };
 
   const handleReset = () => {
@@ -411,9 +449,26 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
             )}
 
             {activeTab === 'submissions' && (
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-400">Local Verified Execution Logs:</div>
-                {runResult ? (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-400">Verified Submission Records (SQLite):</div>
+                {problemSubmissions.length > 0 ? (
+                  <div className="space-y-2">
+                    {problemSubmissions.map((sub, sIdx) => (
+                      <div key={sub.id || sIdx} className="p-3 bg-[#142038] rounded-xl border border-[#1E2A44] flex items-center justify-between text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${sub.status === 'Accepted' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                          <span className={`font-bold ${sub.status === 'Accepted' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {sub.status}
+                          </span>
+                        </div>
+                        <div className="text-right text-gray-400 text-[11px]">
+                          {sub.runtime_ms > 0 && <span className="mr-3 text-gray-200">{sub.runtime_ms} ms</span>}
+                          <span>{new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : runResult ? (
                   <div className="p-3 bg-[#142038] rounded-xl border border-[#1E2A44] flex items-center justify-between text-xs font-mono">
                     <div>
                       <span className={`font-bold ${runResult.status === 'Accepted' ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -427,7 +482,7 @@ export const PythonPracticeView: React.FC<PythonPracticeViewProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-gray-500 italic p-3">No submissions yet for this session.</div>
+                  <div className="text-gray-500 italic p-3">No submissions yet for this problem. Click "Submit Solution" to run and record.</div>
                 )}
               </div>
             )}

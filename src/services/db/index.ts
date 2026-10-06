@@ -3,7 +3,7 @@ import type { Database } from 'sql.js';
 import seedData from '@/data/seedData.json';
 import sqlExercisesData from '@/data/sqlExercises.json';
 import postgresExercisesData from '@/data/postgresExercises.json';
-import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus, SqlExercise, PostgresExercise } from '@/types';
+import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus, SqlExercise, PostgresExercise, SubmissionRecord, HeatmapResult, ProfileStatsResult, HeatmapDay } from '@/types';
 
 const DB_STORAGE_KEY = 'ap_encrypted_sqlite_db_v1';
 const DB_HMAC_KEY = 'ap_tamper_evidence_root_key_2026';
@@ -173,6 +173,10 @@ function initializeSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS attempts (
       id TEXT PRIMARY KEY,
       question_id TEXT,
+      problem_title TEXT,
+      difficulty TEXT,
+      category TEXT,
+      problem_type TEXT DEFAULT 'python',
       language TEXT NOT NULL,
       code TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -251,6 +255,17 @@ function initializeSchema(db: Database): void {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Safe migrations for attempts table
+  const attemptCols = [
+    'ALTER TABLE attempts ADD COLUMN problem_title TEXT;',
+    'ALTER TABLE attempts ADD COLUMN difficulty TEXT;',
+    'ALTER TABLE attempts ADD COLUMN category TEXT;',
+    'ALTER TABLE attempts ADD COLUMN problem_type TEXT DEFAULT "python";'
+  ];
+  for (const sql of attemptCols) {
+    try { db.run(sql); } catch {}
+  }
 }
 
 async function seedAdditionalTables(db: Database): Promise<void> {
@@ -309,6 +324,12 @@ async function seedAdditionalTables(db: Database): Promise<void> {
           ]
         );
       }
+    }
+
+    const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
+    const attCount = attCountRes.length > 0 ? (attCountRes[0].values[0][0] as number) : 0;
+    if (attCount === 0) {
+      await seedBaselineAttempts(db);
     }
   } catch (err) {
     console.warn('Error in seedAdditionalTables:', err);
@@ -567,24 +588,26 @@ export async function fetchStats() {
   const sData = sRes.length > 0 ? sRes[0].values[0] : [0];
 
   const totalQuestions = (qData[0] as number) || 1337;
-  const solvedQuestions = (qData[1] as number) || 0;
   const attemptedQuestions = (qData[2] as number) || 0;
   const totalTasks = (tData[0] as number) || 0;
   const completedTasks = (tData[1] as number) || 0;
   const activeSeconds = (sData[0] as number) || 3600;
 
-  const accuracy = attemptedQuestions > 0 ? Math.round((solvedQuestions / attemptedQuestions) * 100) : 78;
+  const profileStats = await fetchProfileStats();
+  const accuracy = profileStats.totalSubmissions > 0
+    ? Math.round((profileStats.totalSolved / profileStats.totalSubmissions) * 100)
+    : (attemptedQuestions > 0 ? Math.round((profileStats.totalSolved / attemptedQuestions) * 100) : 78);
 
   return {
     totalQuestions,
-    solvedQuestions: solvedQuestions > 0 ? solvedQuestions : 142, // seeded mockup sample fallback
+    solvedQuestions: profileStats.totalSolved,
     accuracy,
     activeStudyHours: (activeSeconds / 3600).toFixed(1),
     topicsCompleted: 18,
     totalTopics: 52,
     completedTasks: completedTasks > 0 ? completedTasks : 3,
     totalTasks: totalTasks > 0 ? totalTasks : 5,
-    streakDays: 14,
+    streakDays: profileStats.currentStreak,
   };
 }
 
@@ -992,5 +1015,649 @@ export function generateSampleCsv(category: 'python' | 'sql' | 'postgres'): stri
     return `id,title,difficulty,category,description,schema_sql,seed_sql,initial_query,solution_sql,expected_output_json,input_ascii,output_ascii,explanation,image_url\n"sql-175","175. Combine Two Tables","Easy","JOINs","Write a solution to report the first name, last name, city, and state of each person in the Person table.","CREATE TABLE Person (personId INT PRIMARY KEY, lastName VARCHAR(50), firstName VARCHAR(50)); CREATE TABLE Address (addressId INT PRIMARY KEY, personId INT, city VARCHAR(50), state VARCHAR(50));","INSERT INTO Person VALUES (1, 'Wang', 'Allen'), (2, 'Alice', 'Bob'); INSERT INTO Address VALUES (1, 2, 'New York City', 'New York');","SELECT firstName, lastName, city, state FROM Person LEFT JOIN Address ON Person.personId = Address.personId;","SELECT firstName, lastName, city, state FROM Person LEFT JOIN Address ON Person.personId = Address.personId;","[{\\"firstName\\":\\"Allen\\",\\"lastName\\":\\"Wang\\",\\"city\\":null,\\"state\\":null}]","Input:\\nPerson table:\\n+----------+----------+-----------+\\n| personId | lastName | firstName |\\n+----------+----------+-----------+\\n| 1        | Wang     | Allen     |","Output:\\n+-----------+----------+---------------+----------+\\n| firstName | lastName | city          | state    |\\n+-----------+----------+---------------+----------+\\n| Allen     | Wang     | Null          | Null     |","If address not found, return null.",""`;
   }
   return `id,title,difficulty,category,description,setup_sql,query_solution,verification_sql,notes\n"pg-1","PostgreSQL 16 Diagnostic & Catalog Inspection","Easy","System Catalogs","Inspect PostgreSQL server metadata from pg_stat_database.","SELECT version(), current_database(), current_user;","SELECT datname, numbackends, xact_commit FROM pg_stat_database WHERE datname = current_database();","SELECT count(*) FROM pg_stat_database;","Genuine server query"`;
+}
+
+// ==========================================
+// Submissions, Streaks & Heatmap Database Engine
+// ==========================================
+
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function dateStringToDayNum(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return Math.floor(Date.UTC(y, m - 1, d, 12, 0, 0) / 86400000);
+}
+
+export async function seedBaselineAttempts(db: Database): Promise<void> {
+  try {
+    let allQ: Array<{ id: string; title: string; difficulty: string; pattern: string }> = [];
+    const qRes = db.exec(`SELECT id, title, difficulty, pattern_name FROM questions ORDER BY order_num ASC`);
+    if (qRes.length && qRes[0].values.length) {
+      for (const row of qRes[0].values) {
+        allQ.push({
+          id: String(row[0]),
+          title: String(row[1]),
+          difficulty: String(row[2] || 'Easy'),
+          pattern: String(row[3] || 'Algorithms'),
+        });
+      }
+    } else if (seedData && (seedData as any).questions) {
+      allQ = (seedData as any).questions.map((q: any) => ({
+        id: q.id,
+        title: q.title,
+        difficulty: q.difficulty || 'Easy',
+        pattern: q.pattern_name || 'Algorithms',
+      }));
+    }
+
+    const easyQ = allQ.filter(q => q.difficulty === 'Easy');
+    const medQ = allQ.filter(q => q.difficulty === 'Medium');
+    const hardQ = allQ.filter(q => q.difficulty === 'Hard');
+
+    const solvedSet: Array<{ id: string; title: string; difficulty: string; category: string; type: 'python' | 'sql' }> = [];
+    
+    // LeetCode 175
+    solvedSet.push({
+      id: 'sql-175',
+      title: '175. Combine Two Tables',
+      difficulty: 'Easy',
+      category: 'JOINs',
+      type: 'sql',
+    });
+
+    for (let i = 0; i < Math.min(63, easyQ.length); i++) {
+      solvedSet.push({
+        id: easyQ[i].id,
+        title: easyQ[i].title,
+        difficulty: 'Easy',
+        category: easyQ[i].pattern,
+        type: 'python',
+      });
+    }
+
+    for (let i = 0; i < Math.min(23, medQ.length); i++) {
+      solvedSet.push({
+        id: medQ[i].id,
+        title: medQ[i].title,
+        difficulty: 'Medium',
+        category: medQ[i].pattern,
+        type: 'python',
+      });
+    }
+
+    for (let i = 0; i < Math.min(3, hardQ.length); i++) {
+      solvedSet.push({
+        id: hardQ[i].id,
+        title: hardQ[i].title,
+        difficulty: 'Hard',
+        category: hardQ[i].pattern,
+        type: 'python',
+      });
+    }
+
+    const attemptingQ = [
+      easyQ[64] || { id: 'att-1', title: 'Subtree of Another Tree', difficulty: 'Easy', pattern: 'Trees' },
+      medQ[24] || { id: 'att-2', title: 'Course Schedule', difficulty: 'Medium', pattern: 'Graphs' },
+      hardQ[4] || { id: 'att-3', title: 'Trapping Rain Water', difficulty: 'Hard', pattern: 'Two Pointers' },
+    ];
+
+    const activeDayOffsets = [
+      0, -1, -2,
+      -7, -8,
+      -15,
+      -23, -24, -25,
+      -39,
+      -58,
+      -82,
+      -109, -110,
+      -140,
+      -175,
+      -215,
+      -255,
+      -300,
+      -345,
+    ];
+
+    const attemptsToInsert: any[] = [];
+    const now = Date.now();
+
+    const getIsoForDayOffset = (offset: number, hour: number = 14, min: number = 30) => {
+      const d = new Date(now + offset * 86400000);
+      d.setHours(hour, min, Math.floor(Math.random() * 59), 0);
+      return d.toISOString();
+    };
+
+    let pIdx = 0;
+    for (let dayIdx = 0; dayIdx < activeDayOffsets.length; dayIdx++) {
+      const offset = activeDayOffsets[dayIdx];
+      const countForDay = dayIdx < 10 ? 5 : 4;
+      for (let c = 0; c < countForDay && pIdx < solvedSet.length; c++) {
+        const item = solvedSet[pIdx++];
+        attemptsToInsert.push({
+          id: `seed-sub-${attemptsToInsert.length + 1}`,
+          question_id: item.id,
+          problem_title: item.title,
+          difficulty: item.difficulty,
+          category: item.category,
+          problem_type: item.type,
+          language: item.type === 'sql' ? 'sql' : 'python',
+          code: item.type === 'sql' ? 'SELECT * FROM Person;' : 'def solution():\n    pass',
+          status: 'Accepted',
+          runtime_ms: 10 + Math.floor(Math.random() * 40),
+          memory_kb: 14000 + Math.floor(Math.random() * 2000),
+          test_cases_passed: 10,
+          total_test_cases: 10,
+          created_at: getIsoForDayOffset(offset, 10 + (c % 10), (c * 7) % 60),
+        });
+      }
+    }
+
+    while (pIdx < solvedSet.length) {
+      const item = solvedSet[pIdx++];
+      attemptsToInsert.push({
+        id: `seed-sub-${attemptsToInsert.length + 1}`,
+        question_id: item.id,
+        problem_title: item.title,
+        difficulty: item.difficulty,
+        category: item.category,
+        problem_type: item.type,
+        language: item.type === 'sql' ? 'sql' : 'python',
+        code: item.type === 'sql' ? 'SELECT * FROM Person;' : 'def solution():\n    pass',
+        status: 'Accepted',
+        runtime_ms: 15,
+        memory_kb: 14200,
+        test_cases_passed: 10,
+        total_test_cases: 10,
+        created_at: getIsoForDayOffset(activeDayOffsets[0], 11, 20),
+      });
+    }
+
+    for (let i = 0; i < attemptingQ.length; i++) {
+      const att = attemptingQ[i];
+      attemptsToInsert.push({
+        id: `seed-sub-${attemptsToInsert.length + 1}`,
+        question_id: att.id,
+        problem_title: att.title,
+        difficulty: att.difficulty,
+        category: att.pattern,
+        problem_type: 'python',
+        language: 'python',
+        code: 'def solution():\n    return False',
+        status: 'Wrong Answer',
+        runtime_ms: 22,
+        memory_kb: 15300,
+        test_cases_passed: 5,
+        total_test_cases: 10,
+        created_at: getIsoForDayOffset(activeDayOffsets[0], 12, 10 + i * 5),
+      });
+    }
+
+    let extraCounter = 0;
+    while (attemptsToInsert.length < 124) {
+      const targetDay = activeDayOffsets[extraCounter % activeDayOffsets.length];
+      const sampleItem = solvedSet[extraCounter % solvedSet.length];
+      attemptsToInsert.push({
+        id: `seed-sub-${attemptsToInsert.length + 1}`,
+        question_id: sampleItem.id,
+        problem_title: sampleItem.title,
+        difficulty: sampleItem.difficulty,
+        category: sampleItem.category,
+        problem_type: sampleItem.type,
+        language: sampleItem.type === 'sql' ? 'sql' : 'python',
+        code: sampleItem.type === 'sql' ? 'SELECT * FROM Person;' : 'def solution():\n    pass',
+        status: extraCounter % 2 === 0 ? 'Wrong Answer' : 'Accepted',
+        runtime_ms: 25,
+        memory_kb: 14800,
+        test_cases_passed: 8,
+        total_test_cases: 10,
+        created_at: getIsoForDayOffset(targetDay, 15, (extraCounter * 11) % 60),
+      });
+      extraCounter++;
+    }
+
+    for (const sub of attemptsToInsert) {
+      db.run(
+        `INSERT INTO attempts (id, question_id, language, code, status, runtime_ms, memory_kb, test_cases_passed, total_test_cases, row_hmac, created_at, problem_title, difficulty, category, problem_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          sub.id,
+          sub.question_id,
+          sub.language,
+          sub.code,
+          sub.status,
+          sub.runtime_ms,
+          sub.memory_kb,
+          sub.test_cases_passed,
+          sub.total_test_cases,
+          'hmac-' + sub.id,
+          sub.created_at,
+          sub.problem_title,
+          sub.difficulty,
+          sub.category,
+          sub.problem_type
+        ]
+      );
+    }
+
+    for (const item of solvedSet) {
+      if (item.type === 'python') {
+        db.run(`UPDATE questions SET status = 'solved' WHERE id = ? OR title = ?`, [item.id, item.title]);
+      }
+    }
+    for (const item of attemptingQ) {
+      db.run(`UPDATE questions SET status = 'attempted' WHERE (id = ? OR title = ?) AND status != 'solved'`, [item.id, item.title]);
+    }
+  } catch (err) {
+    console.warn('Failed to seed baseline attempts:', err);
+  }
+}
+
+export async function recalculateStreaks(): Promise<{
+  currentStreak: number;
+  longestStreak: number;
+  totalActiveDays: number;
+  totalSubmissions: number;
+}> {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT created_at FROM attempts ORDER BY created_at ASC`);
+    if (!res.length || !res[0].values.length) {
+      return { currentStreak: 0, longestStreak: 0, totalActiveDays: 0, totalSubmissions: 0 };
+    }
+
+    const rows = res[0].values;
+    const totalSubmissions = rows.length;
+    const dateCountMap = new Map<string, number>();
+
+    for (const r of rows) {
+      const raw = String(r[0]);
+      const dt = new Date(raw);
+      if (!isNaN(dt.getTime())) {
+        const key = toLocalDateStr(dt);
+        dateCountMap.set(key, (dateCountMap.get(key) || 0) + 1);
+      }
+    }
+
+    const uniqueDates = Array.from(dateCountMap.keys()).sort();
+    const totalActiveDays = uniqueDates.length;
+    if (totalActiveDays === 0) {
+      return { currentStreak: 0, longestStreak: 0, totalActiveDays: 0, totalSubmissions };
+    }
+
+    const dayNums = uniqueDates.map(dateStringToDayNum);
+
+    let longestStreak = 0;
+    let tempStreak = 0;
+    let prevDay = -1;
+
+    for (const dNum of dayNums) {
+      if (prevDay === -1) {
+        tempStreak = 1;
+      } else if (dNum === prevDay + 1) {
+        tempStreak += 1;
+      } else if (dNum > prevDay + 1) {
+        tempStreak = 1;
+      }
+      prevDay = dNum;
+      if (tempStreak > longestStreak) {
+        longestStreak = tempStreak;
+      }
+    }
+
+    const todayNum = dateStringToDayNum(toLocalDateStr(new Date()));
+    const yesterdayNum = todayNum - 1;
+    const daySet = new Set(dayNums);
+    const lastActiveDay = dayNums[dayNums.length - 1];
+
+    let currentStreak = 0;
+    if (lastActiveDay === todayNum || lastActiveDay === yesterdayNum) {
+      let check = lastActiveDay;
+      while (daySet.has(check)) {
+        currentStreak += 1;
+        check -= 1;
+      }
+    } else {
+      currentStreak = 0;
+    }
+
+    return {
+      currentStreak,
+      longestStreak,
+      totalActiveDays,
+      totalSubmissions,
+    };
+  } catch (err) {
+    console.error('Error recalculating streaks:', err);
+    return { currentStreak: 0, longestStreak: 0, totalActiveDays: 0, totalSubmissions: 0 };
+  }
+}
+
+export async function fetchProfileStats(): Promise<ProfileStatsResult> {
+  const db = await getDatabase();
+  try {
+    const solvedRes = db.exec(`SELECT COUNT(DISTINCT question_id) FROM attempts WHERE status = 'Accepted'`);
+    const totalSolved = solvedRes.length && solvedRes[0].values.length ? (solvedRes[0].values[0][0] as number) : 0;
+
+    const diffRes = db.exec(`
+      SELECT difficulty, COUNT(DISTINCT question_id) 
+      FROM attempts 
+      WHERE status = 'Accepted' 
+      GROUP BY difficulty
+    `);
+    let easySolved = 0;
+    let mediumSolved = 0;
+    let hardSolved = 0;
+    if (diffRes.length && diffRes[0].values.length) {
+      for (const row of diffRes[0].values) {
+        const diff = String(row[0] || '').toLowerCase();
+        const cnt = Number(row[1]) || 0;
+        if (diff === 'easy') easySolved += cnt;
+        else if (diff === 'medium') mediumSolved += cnt;
+        else if (diff === 'hard') hardSolved += cnt;
+      }
+    }
+
+    const attRes = db.exec(`
+      SELECT COUNT(DISTINCT question_id) 
+      FROM attempts 
+      WHERE question_id NOT IN (
+        SELECT DISTINCT question_id FROM attempts WHERE status = 'Accepted'
+      )
+    `);
+    const attemptingCount = attRes.length && attRes[0].values.length ? (attRes[0].values[0][0] as number) : 0;
+
+    let easyTotal = 969;
+    let mediumTotal = 2124;
+    let hardTotal = 980;
+
+    const qTotalRes = db.exec(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN difficulty = 'Easy' THEN 1 ELSE 0 END) as easy_cnt,
+        SUM(CASE WHEN difficulty = 'Medium' THEN 1 ELSE 0 END) as med_cnt,
+        SUM(CASE WHEN difficulty = 'Hard' THEN 1 ELSE 0 END) as hard_cnt
+      FROM questions
+    `);
+    if (qTotalRes.length && qTotalRes[0].values.length) {
+      const row = qTotalRes[0].values[0];
+      const e = Number(row[1]) || 0;
+      const m = Number(row[2]) || 0;
+      const h = Number(row[3]) || 0;
+      if (e > 0) easyTotal = Math.max(969, e);
+      if (m > 0) mediumTotal = Math.max(2124, m);
+      if (h > 0) hardTotal = Math.max(980, h);
+    }
+    const totalQuestions = easyTotal + mediumTotal + hardTotal;
+
+    const streakInfo = await recalculateStreaks();
+
+    return {
+      totalSolved,
+      totalQuestions,
+      easySolved,
+      easyTotal,
+      mediumSolved,
+      mediumTotal,
+      hardSolved,
+      hardTotal,
+      attemptingCount,
+      totalSubmissions: streakInfo.totalSubmissions,
+      totalActiveDays: streakInfo.totalActiveDays,
+      currentStreak: streakInfo.currentStreak,
+      longestStreak: streakInfo.longestStreak,
+    };
+  } catch (err) {
+    console.error('Error in fetchProfileStats:', err);
+    return {
+      totalSolved: 0,
+      totalQuestions: 4073,
+      easySolved: 0,
+      easyTotal: 969,
+      mediumSolved: 0,
+      mediumTotal: 2124,
+      hardSolved: 0,
+      hardTotal: 980,
+      attemptingCount: 0,
+      totalSubmissions: 0,
+      totalActiveDays: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+  }
+}
+
+export async function fetchSubmissionHeatmap(year: number | 'current' = 'current'): Promise<HeatmapResult> {
+  const db = await getDatabase();
+  const streakInfo = await recalculateStreaks();
+
+  const res = db.exec(`SELECT created_at, status FROM attempts ORDER BY created_at ASC`);
+  const dateMap = new Map<string, { total: number; accepted: number }>();
+
+  if (res.length && res[0].values.length) {
+    for (const r of res[0].values) {
+      const raw = String(r[0]);
+      const st = String(r[1]);
+      const dt = new Date(raw);
+      if (!isNaN(dt.getTime())) {
+        const key = toLocalDateStr(dt);
+        const cur = dateMap.get(key) || { total: 0, accepted: 0 };
+        cur.total += 1;
+        if (st === 'Accepted') cur.accepted += 1;
+        dateMap.set(key, cur);
+      }
+    }
+  }
+
+  let startDate: Date;
+  let endDate: Date;
+
+  if (year === 'current') {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (6 - dayOfWeek), 23, 59, 59);
+    startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (52 * 7) + 1);
+    startDate.setHours(0, 0, 0, 0);
+  } else {
+    startDate = new Date(year, 0, 1, 0, 0, 0);
+    endDate = new Date(year, 11, 31, 23, 59, 59);
+  }
+
+  const weeks: HeatmapDay[][] = [];
+  let curWeek: HeatmapDay[] = [];
+  const curDate = new Date(startDate);
+
+  while (curDate <= endDate) {
+    const key = toLocalDateStr(curDate);
+    const data = dateMap.get(key);
+    const count = data ? data.total : 0;
+    const acceptedCount = data ? data.accepted : 0;
+
+    let level = 0;
+    if (count >= 10) level = 4;
+    else if (count >= 6) level = 3;
+    else if (count >= 3) level = 2;
+    else if (count >= 1) level = 1;
+
+    curWeek.push({
+      date: key,
+      count,
+      acceptedCount,
+      level,
+    });
+
+    if (curWeek.length === 7) {
+      weeks.push(curWeek);
+      curWeek = [];
+    }
+
+    curDate.setDate(curDate.getDate() + 1);
+  }
+
+  if (curWeek.length > 0) {
+    while (curWeek.length < 7) {
+      curWeek.push({ date: '', count: 0, acceptedCount: 0, level: 0 });
+    }
+    weeks.push(curWeek);
+  }
+
+  return {
+    weeks: weeks.slice(-52),
+    totalSubmissions: streakInfo.totalSubmissions,
+    totalActiveDays: streakInfo.totalActiveDays,
+    currentStreak: streakInfo.currentStreak,
+    longestStreak: streakInfo.longestStreak,
+    year,
+  };
+}
+
+export async function recordSubmission(sub: {
+  id?: string;
+  question_id: string;
+  problem_title?: string;
+  difficulty?: string;
+  category?: string;
+  problem_type?: 'python' | 'sql' | 'postgres';
+  language: string;
+  code: string;
+  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error';
+  runtime_ms?: number;
+  memory_kb?: number;
+  test_cases_passed?: number;
+  total_test_cases?: number;
+  created_at?: string;
+}): Promise<SubmissionRecord> {
+  const db = await getDatabase();
+  const subId = sub.id || `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const timestamp = sub.created_at || new Date().toISOString();
+  const problemTitle = sub.problem_title || sub.question_id;
+  const difficulty = sub.difficulty || 'Easy';
+  const category = sub.category || 'General';
+  const problemType = sub.problem_type || 'python';
+  const rowHmac = await computeRowHmac('attempt', subId);
+
+  db.run(
+    `INSERT INTO attempts (id, question_id, language, code, status, runtime_ms, memory_kb, test_cases_passed, total_test_cases, row_hmac, created_at, problem_title, difficulty, category, problem_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      subId,
+      sub.question_id,
+      sub.language,
+      sub.code,
+      sub.status,
+      sub.runtime_ms ?? 0,
+      sub.memory_kb ?? 0,
+      sub.test_cases_passed ?? 0,
+      sub.total_test_cases ?? 0,
+      rowHmac,
+      timestamp,
+      problemTitle,
+      difficulty,
+      category,
+      problemType
+    ]
+  );
+
+  if (sub.status === 'Accepted') {
+    db.run(
+      `UPDATE questions SET status = 'solved', last_attempted = ? WHERE id = ? OR title = ?`,
+      [timestamp, sub.question_id, problemTitle]
+    );
+  } else {
+    db.run(
+      `UPDATE questions SET status = 'attempted', last_attempted = ? WHERE (id = ? OR title = ?) AND status != 'solved'`,
+      [timestamp, sub.question_id, problemTitle]
+    );
+  }
+
+  persistDatabase();
+
+  const record: SubmissionRecord = {
+    id: subId,
+    question_id: sub.question_id,
+    problem_title: problemTitle,
+    difficulty,
+    category,
+    problem_type: problemType,
+    language: sub.language,
+    code: sub.code,
+    status: sub.status,
+    runtime_ms: sub.runtime_ms ?? 0,
+    memory_kb: sub.memory_kb ?? 0,
+    test_cases_passed: sub.test_cases_passed ?? 0,
+    total_test_cases: sub.total_test_cases ?? 0,
+    created_at: timestamp,
+  };
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_submissions_updated', { detail: record }));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+  }
+
+  return record;
+}
+
+export async function fetchSubmissions(options?: {
+  limit?: number;
+  questionId?: string;
+  status?: string;
+}): Promise<SubmissionRecord[]> {
+  const db = await getDatabase();
+  let sql = `SELECT id, question_id, problem_title, difficulty, category, problem_type, language, code, status, runtime_ms, memory_kb, test_cases_passed, total_test_cases, created_at FROM attempts WHERE 1=1`;
+  const params: any[] = [];
+
+  if (options?.questionId) {
+    sql += ` AND question_id = ?`;
+    params.push(options.questionId);
+  }
+  if (options?.status) {
+    sql += ` AND status = ?`;
+    params.push(options.status);
+  }
+
+  sql += ` ORDER BY created_at DESC`;
+  if (options?.limit) {
+    sql += ` LIMIT ?`;
+    params.push(options.limit);
+  }
+
+  const res = db.exec(sql, params);
+  if (!res.length || !res[0].values.length) return [];
+
+  const cols = res[0].columns;
+  return res[0].values.map(row => {
+    const obj: any = {};
+    cols.forEach((col, i) => { obj[col] = row[i]; });
+    return obj as SubmissionRecord;
+  });
+}
+
+export async function fetchSolvedProblemIds(): Promise<Set<string>> {
+  const db = await getDatabase();
+  try {
+    const res = db.exec(`SELECT DISTINCT question_id FROM attempts WHERE status = 'Accepted'`);
+    if (!res.length || !res[0].values.length) return new Set();
+    return new Set(res[0].values.map(r => String(r[0])));
+  } catch {
+    return new Set();
+  }
+}
+
+export async function clearSubmissionsForTesting(): Promise<void> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM attempts;`);
+  db.run(`UPDATE questions SET status = 'todo';`);
+  persistDatabase();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_submissions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+  }
 }
 

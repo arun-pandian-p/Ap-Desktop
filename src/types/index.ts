@@ -131,6 +131,10 @@ export interface Attempt {
   id: string;
   question_id: string;
   question_title?: string;
+  problem_title?: string;
+  difficulty?: string;
+  category?: string;
+  problem_type?: 'python' | 'sql' | 'postgres';
   language: string;
   code: string;
   status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error';
@@ -139,6 +143,55 @@ export interface Attempt {
   test_cases_passed: number;
   total_test_cases: number;
   created_at: string;
+}
+
+export interface SubmissionRecord {
+  id: string;
+  question_id: string;
+  problem_title: string;
+  difficulty: string;
+  category?: string;
+  problem_type?: 'python' | 'sql' | 'postgres';
+  language: string;
+  code: string;
+  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error';
+  runtime_ms?: number;
+  memory_kb?: number;
+  test_cases_passed?: number;
+  total_test_cases?: number;
+  created_at: string;
+}
+
+export interface HeatmapDay {
+  date: string;
+  count: number;
+  acceptedCount: number;
+  level: number;
+}
+
+export interface HeatmapResult {
+  weeks: HeatmapDay[][];
+  totalSubmissions: number;
+  totalActiveDays: number;
+  currentStreak: number;
+  longestStreak: number;
+  year: number | 'current';
+}
+
+export interface ProfileStatsResult {
+  totalSolved: number;
+  totalQuestions: number;
+  easySolved: number;
+  easyTotal: number;
+  mediumSolved: number;
+  mediumTotal: number;
+  hardSolved: number;
+  hardTotal: number;
+  attemptingCount: number;
+  totalSubmissions: number;
+  totalActiveDays: number;
+  currentStreak: number;
+  longestStreak: number;
 }
 
 export interface SqlExercise {
@@ -196,7 +249,7 @@ export interface UserProfile {
   username: string;
   email: string;
   avatarUrl?: string;
-  rank: number;
+  rank?: number;
   bio: string;
   location: string;
   institution: string;

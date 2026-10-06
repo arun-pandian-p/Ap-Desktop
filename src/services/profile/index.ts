@@ -4,30 +4,29 @@ import { getDatabase } from '@/services/db';
 const STORAGE_KEY = 'ap_user_profile';
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
-  name: 'Arun Pandian',
-  username: 'arun4709s',
+  name: 'Arun pandian',
+  username: 'shadowbytewarrior',
   email: 'arunpandi47777@gmail.com',
   avatarUrl: '',
-  rank: 3339,
-  bio: 'Insanely mad about coding',
+  bio: 'Data Analyst & Software Engineer',
   location: 'India',
   institution: 'National Institute of Technology Surathkal',
-  website: 'https://arunpandian.dev',
-  github: 'arun4709s',
-  linkedin: 'arun-pandian',
+  website: 'https://arunpandian.online',
+  github: 'arun-pandian-p',
+  linkedin: 'arunpandianp-dataanalyst',
   twitter: 'arunpandian',
   skills: ['c++', 'python', 'sql', 'rust', 'go', 'mern', 'flutter'],
   contestRating: 1923,
   globalRanking: '19,203 / 496,921',
   attendedContests: 33,
   solved: {
-    total: 1355,
-    easy: 453,
-    easyTotal: 772,
-    medium: 786,
-    mediumTotal: 1601,
-    hard: 116,
-    hardTotal: 676,
+    total: 90,
+    easy: 64,
+    easyTotal: 969,
+    medium: 23,
+    mediumTotal: 2124,
+    hard: 3,
+    hardTotal: 980,
   },
 };
 
@@ -36,12 +35,36 @@ export function getUserProfile(): UserProfile {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Ensure rank is stripped
+      delete parsed.rank;
       return { ...DEFAULT_USER_PROFILE, ...parsed };
     }
   } catch (err) {
     console.error('Failed to parse user profile from localStorage:', err);
   }
   return DEFAULT_USER_PROFILE;
+}
+
+export async function getDynamicUserProfile(): Promise<UserProfile> {
+  const base = getUserProfile();
+  try {
+    const { fetchProfileStats } = await import('@/services/db');
+    const stats = await fetchProfileStats();
+    return {
+      ...base,
+      solved: {
+        total: stats.totalSolved,
+        easy: stats.easySolved,
+        easyTotal: stats.easyTotal,
+        medium: stats.mediumSolved,
+        mediumTotal: stats.mediumTotal,
+        hard: stats.hardSolved,
+        hardTotal: stats.hardTotal,
+      },
+    };
+  } catch {
+    return base;
+  }
 }
 
 export async function saveUserProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
