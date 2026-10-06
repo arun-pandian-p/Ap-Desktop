@@ -1,41 +1,77 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import Editor, { OnMount, loader } from '@monaco-editor/react';
-import { AlertCircle, Terminal, RefreshCw } from 'lucide-react';
+import Editor, { OnMount } from '@monaco-editor/react';
+import { 
+  AlertCircle, 
+  RefreshCw, 
+  Maximize2, 
+  Minimize2, 
+  Undo2, 
+  Redo2, 
+  AlignLeft, 
+  Check, 
+  Code2 
+} from 'lucide-react';
+import { 
+  LanguageSelectorDropdown, 
+  LanguageOption, 
+  PYTHON_WORKSPACE_COLUMNS, 
+  SQL_WORKSPACE_COLUMNS, 
+  POSTGRES_WORKSPACE_COLUMNS 
+} from './LanguageSelectorDropdown';
 
 export interface MonacoCodeEditorHandle {
   getValue: () => string;
   setValue: (val: string) => void;
   focus: () => void;
+  format: () => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 export interface MonacoCodeEditorProps {
   value: string;
   onChange: (value: string) => void;
-  language: 'python' | 'sql' | 'javascript' | 'json';
+  workspace?: 'python' | 'sql' | 'postgres';
+  language?: string; // e.g. 'python', 'sql', 'cpp', etc.
+  selectedLanguageId?: string;
+  onLanguageChange?: (lang: LanguageOption) => void;
   theme?: 'vs-dark' | 'vs-light';
   height?: string | number;
   onRun?: () => void;
   readOnly?: boolean;
   className?: string;
+  showToolbar?: boolean;
+  showStatusBar?: boolean;
+  title?: string;
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(({
   value,
   onChange,
-  language,
+  workspace = 'python',
+  language = 'python',
+  selectedLanguageId = 'python3',
+  onLanguageChange,
   theme = 'vs-dark',
   height = '100%',
   onRun,
   readOnly = false,
   className = '',
+  showToolbar = true,
+  showStatusBar = true,
+  title = 'Code',
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const [isReady, setIsReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
+  const [isSaved, setIsSaved] = useState(true);
   const lastEmittedValueRef = useRef<string>(value);
 
-  // Expose imperative handle so parent components can ALWAYS read latest editor content
+  // Expose imperative handle
   useImperativeHandle(ref, () => ({
     getValue: () => {
       if (editorRef.current) {
@@ -54,6 +90,21 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editorRef.current.focus();
       }
     },
+    format: () => {
+      if (editorRef.current) {
+        editorRef.current.getAction('editor.action.formatDocument')?.run();
+      }
+    },
+    undo: () => {
+      if (editorRef.current) {
+        editorRef.current.trigger('keyboard', 'undo', null);
+      }
+    },
+    redo: () => {
+      if (editorRef.current) {
+        editorRef.current.trigger('keyboard', 'redo', null);
+      }
+    },
   }), []);
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
@@ -61,14 +112,22 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     monacoRef.current = monaco;
     setIsReady(true);
 
-    // Ctrl+Enter / Cmd+Enter keyboard shortcut to trigger Run
+    // Ctrl+Enter / Cmd+Enter shortcut
     if (onRun) {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
         onRun();
       });
     }
 
-    // Set model options based on language
+    // Track live cursor position
+    editor.onDidChangeCursorPosition((e) => {
+      setCursorPos({
+        line: e.position.lineNumber,
+        col: e.position.column,
+      });
+    });
+
+    // Indentation options
     editor.getModel()?.updateOptions({
       tabSize: language === 'python' ? 4 : 2,
       insertSpaces: true,
@@ -78,11 +137,17 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const handleEditorChange = (val: string | undefined) => {
     const newVal = val || '';
     lastEmittedValueRef.current = newVal;
+    setIsSaved(false);
     onChange(newVal);
+
+    // Auto mark saved shortly after typing pauses
+    const timer = setTimeout(() => {
+      setIsSaved(true);
+    }, 800);
+    return () => clearTimeout(timer);
   };
 
-  // Synchronize external value changes (e.g. problem selection, reset) safely
-  // NEVER call setValue if the change originated from the user typing inside Monaco
+  // Synchronize external value changes safely (without clobbering user keystrokes)
   useEffect(() => {
     if (editorRef.current && isReady) {
       if (value !== lastEmittedValueRef.current) {
@@ -90,68 +155,151 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         const currentVal = editorRef.current.getValue();
         if (value !== currentVal) {
           editorRef.current.setValue(value);
+          setIsSaved(true);
         }
       }
     }
   }, [value, isReady]);
 
-  if (loadError) {
-    return (
-      <div className={`flex flex-col h-full bg-[#0F182B] text-gray-200 p-4 font-mono text-xs ${className}`}>
-        <div className="flex items-center gap-2 text-amber-400 mb-2">
-          <AlertCircle className="w-4 h-4" />
-          <span className="font-semibold">Monaco Editor Fallback Active</span>
-        </div>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          readOnly={readOnly}
-          className="flex-1 w-full bg-[#0B1220] border border-[#1E2A44] rounded-lg p-3 text-gray-200 font-mono text-xs focus:outline-hidden focus:border-[#E11D26] resize-none"
-          placeholder={`Enter ${language.toUpperCase()} code here...`}
-        />
-        <div className="text-[10px] text-gray-500 mt-2">
-          Note: Syntax fallback active. Ctrl+Enter to execute.
-        </div>
-      </div>
-    );
-  }
+  // Language switch without model remount: uses setModelLanguage
+  const handleSelectLanguage = (langOpt: LanguageOption) => {
+    if (editorRef.current && monacoRef.current) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        monacoRef.current.editor.setModelLanguage(model, langOpt.monacoLang);
+      }
+    }
+    if (onLanguageChange) {
+      onLanguageChange(langOpt);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
 
   return (
-    <div className={`relative h-full w-full overflow-hidden ${className}`}>
-      <Editor
-        height={height}
-        language={language}
-        theme={theme}
-        value={value}
-        onChange={handleEditorChange}
-        onMount={handleEditorDidMount}
-        loading={
-          <div className="flex items-center justify-center h-full bg-[#0B1220] text-gray-400 gap-2 font-mono text-xs">
-            <RefreshCw className="w-4 h-4 animate-spin text-[#E11D26]" />
-            <span>Initializing {language.toUpperCase()} workspace...</span>
+    <div 
+      ref={containerRef}
+      className={`flex flex-col bg-[#141824] border border-[#232B3E] rounded-xl overflow-hidden transition-all ${
+        isFullscreen ? 'fixed inset-4 z-50 shadow-2xl' : 'h-full w-full'
+      } ${className}`}
+    >
+      {/* Editor Header Bar */}
+      {showToolbar && (
+        <div className="h-10 bg-[#161B26] border-b border-[#232B3E] px-3 flex items-center justify-between text-xs select-none">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-bold font-mono text-[11px]">
+              <Code2 className="w-3.5 h-3.5" />
+              <span>{title}</span>
+            </div>
+
+            {/* Accessible 3-Column Language Dropdown */}
+            <LanguageSelectorDropdown
+              workspace={workspace}
+              selectedLanguageId={selectedLanguageId}
+              onSelectLanguage={handleSelectLanguage}
+              disabled={readOnly}
+            />
+
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 bg-[#1C212D] border border-neutral-700/50">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Auto</span>
+            </span>
           </div>
-        }
-        options={{
-          minimap: { enabled: false },
-          fontSize: 13,
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          fontLigatures: true,
-          lineNumbers: 'on',
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          readOnly,
-          tabSize: language === 'python' ? 4 : 2,
-          insertSpaces: true,
-          bracketPairColorization: { enabled: true },
-          autoClosingBrackets: 'always',
-          autoClosingQuotes: 'always',
-          formatOnPaste: true,
-          padding: { top: 12, bottom: 12 },
-          renderLineHighlight: 'all',
-          cursorBlinking: 'smooth',
-          cursorSmoothCaretAnimation: 'on',
-        }}
-      />
+
+          {/* Quick Action Icons */}
+          <div className="flex items-center gap-1 text-gray-400">
+            <button
+              type="button"
+              onClick={() => editorRef.current?.getAction('editor.action.formatDocument')?.run()}
+              className="p-1 hover:text-white hover:bg-[#252B38] rounded-md transition-colors"
+              title="Format Code (Alt+Shift+F)"
+            >
+              <AlignLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editorRef.current?.trigger('keyboard', 'undo', null)}
+              className="p-1 hover:text-white hover:bg-[#252B38] rounded-md transition-colors"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editorRef.current?.trigger('keyboard', 'redo', null)}
+              className="p-1 hover:text-white hover:bg-[#252B38] rounded-md transition-colors"
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="p-1 hover:text-white hover:bg-[#252B38] rounded-md transition-colors ml-1"
+              title={isFullscreen ? 'Exit Fullscreen' : 'Expand Editor'}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Monaco Editor Container */}
+      <div className="flex-1 relative overflow-hidden bg-[#141824]">
+        <Editor
+          height="100%"
+          language={language}
+          theme={theme}
+          value={value}
+          onChange={handleEditorChange}
+          onMount={handleEditorDidMount}
+          loading={
+            <div className="flex items-center justify-center h-full bg-[#141824] text-gray-400 gap-2 font-mono text-xs">
+              <RefreshCw className="w-4 h-4 animate-spin text-[#E11D26]" />
+              <span>Loading Monaco Editor...</span>
+            </div>
+          }
+          options={{
+            minimap: { enabled: false },
+            fontSize: 13,
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontLigatures: true,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            readOnly,
+            tabSize: language === 'python' ? 4 : 2,
+            insertSpaces: true,
+            bracketPairColorization: { enabled: true },
+            autoClosingBrackets: 'always',
+            autoClosingQuotes: 'always',
+            formatOnPaste: true,
+            padding: { top: 10, bottom: 10 },
+            renderLineHighlight: 'all',
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+          }}
+        />
+      </div>
+
+      {/* Editor Status Bar */}
+      {showStatusBar && (
+        <div className="h-6 bg-[#121620] border-t border-[#232B3E] px-3 flex items-center justify-between text-[11px] text-gray-400 font-mono select-none">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${isSaved ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+              <span className="text-gray-300">{isSaved ? 'Saved' : 'Editing...'}</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span>UTF-8</span>
+            <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
