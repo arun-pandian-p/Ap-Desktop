@@ -1018,6 +1018,197 @@ export function generateSampleCsv(category: 'python' | 'sql' | 'postgres'): stri
 }
 
 // ==========================================
+// Dataset Reset & Real-Time DB Engine
+// ==========================================
+
+export async function resetQuestionsToDefault(): Promise<{ total: number }> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM questions;`);
+  
+  const { questions } = seedData;
+  for (const q of questions) {
+    db.run(
+      `INSERT OR REPLACE INTO questions 
+       (id, subtopic_id, track_slug, pattern_name, subtopic_name, title, platform, difficulty, practice_link, video_link, hint_link, xp, status, order_num) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        q.id,
+        q.subtopic_id || '',
+        q.track_slug || 'core-dsa',
+        q.pattern_name,
+        q.subtopic_name,
+        q.title,
+        q.platform,
+        q.difficulty,
+        q.practice_link,
+        q.video_link,
+        q.hint_link,
+        q.xp || 5,
+        q.status || 'todo',
+        q.order_num
+      ]
+    );
+  }
+
+  // Preserve 'solved' and 'attempted' status for questions with existing attempts
+  db.run(`
+    UPDATE questions SET status = 'solved' 
+    WHERE id IN (SELECT DISTINCT question_id FROM attempts WHERE status = 'Accepted')
+       OR title IN (SELECT DISTINCT problem_title FROM attempts WHERE status = 'Accepted');
+  `);
+  db.run(`
+    UPDATE questions SET status = 'attempted' 
+    WHERE status != 'solved' AND (
+      id IN (SELECT DISTINCT question_id FROM attempts)
+      OR title IN (SELECT DISTINCT problem_title FROM attempts)
+    );
+  `);
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+  }
+
+  const countRes = db.exec(`SELECT COUNT(*) FROM questions`);
+  const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : questions.length;
+  return { total };
+}
+
+export async function resetSqlExercisesToDefault(): Promise<{ total: number }> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM sql_exercises;`);
+
+  for (const ex of sqlExercisesData as SqlExercise[]) {
+    db.run(
+      `INSERT OR REPLACE INTO sql_exercises 
+       (id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ex.id,
+        ex.title,
+        ex.difficulty,
+        ex.category,
+        ex.description,
+        ex.schema_sql,
+        ex.seed_sql,
+        ex.initial_query || '',
+        ex.solution_sql,
+        ex.expected_output_json,
+        ex.input_ascii || '',
+        ex.output_ascii || '',
+        ex.explanation || '',
+        ex.image_url || ''
+      ]
+    );
+  }
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_sql_exercises_updated'));
+  }
+
+  const countRes = db.exec(`SELECT COUNT(*) FROM sql_exercises`);
+  const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : (sqlExercisesData as any).length;
+  return { total };
+}
+
+export async function resetPostgresExercisesToDefault(): Promise<{ total: number }> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM postgres_exercises;`);
+
+  for (const pg of postgresExercisesData as PostgresExercise[]) {
+    db.run(
+      `INSERT OR REPLACE INTO postgres_exercises 
+       (id, title, difficulty, category, description, setup_sql, query_solution, verification_sql, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        pg.id,
+        pg.title,
+        pg.difficulty,
+        pg.category,
+        pg.description,
+        pg.setup_sql,
+        pg.query_solution,
+        pg.verification_sql || '',
+        pg.notes || ''
+      ]
+    );
+  }
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_postgres_exercises_updated'));
+  }
+
+  const countRes = db.exec(`SELECT COUNT(*) FROM postgres_exercises`);
+  const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : (postgresExercisesData as any).length;
+  return { total };
+}
+
+export async function resetAllUploadedDatasets(): Promise<{ python: number; sql: number; postgres: number }> {
+  const py = await resetQuestionsToDefault();
+  const sql = await resetSqlExercisesToDefault();
+  const pg = await resetPostgresExercisesToDefault();
+  return { python: py.total, sql: sql.total, postgres: pg.total };
+}
+
+export async function resetSubmissionsToBaseline(): Promise<void> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM attempts;`);
+  await seedBaselineAttempts(db);
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_submissions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+  }
+}
+
+export async function testAndConnectRealtimeDb(): Promise<{
+  success: boolean;
+  latencyMs: number;
+  tablesCount: number;
+  questionsCount: number;
+  attemptsCount: number;
+  message: string;
+}> {
+  const start = performance.now();
+  const db = await getDatabase();
+  
+  const qCountRes = db.exec(`SELECT COUNT(*) FROM questions`);
+  const attCountRes = db.exec(`SELECT COUNT(*) FROM attempts`);
+  const tblRes = db.exec(`SELECT COUNT(*) FROM sqlite_master WHERE type='table'`);
+
+  const latencyMs = Math.max(1, Math.round(performance.now() - start));
+  const questionsCount = qCountRes.length ? (qCountRes[0].values[0][0] as number) : 0;
+  const attemptsCount = attCountRes.length ? (attCountRes[0].values[0][0] as number) : 0;
+  const tablesCount = tblRes.length ? (tblRes[0].values[0][0] as number) : 0;
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_submissions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+    window.dispatchEvent(new CustomEvent('ap_sql_exercises_updated'));
+  }
+
+  return {
+    success: true,
+    latencyMs,
+    tablesCount,
+    questionsCount,
+    attemptsCount,
+    message: `Connected to SQLite Wasm Realtime Database (${latencyMs}ms, ${tablesCount} tables, ${questionsCount} questions, ${attemptsCount} attempts)`,
+  };
+}
+
+// ==========================================
 // Submissions, Streaks & Heatmap Database Engine
 // ==========================================
 

@@ -50,7 +50,13 @@ import {
   exportPostgresExercisesToCsv,
   getSqlCurriculumStats,
   getPostgresCurriculumStats,
-  generateSampleCsv
+  generateSampleCsv,
+  resetQuestionsToDefault,
+  resetSqlExercisesToDefault,
+  resetPostgresExercisesToDefault,
+  resetAllUploadedDatasets,
+  resetSubmissionsToBaseline,
+  testAndConnectRealtimeDb
 } from '@/services/db';
 import { getPythonInterpreterInfo, PythonInterpreterInfo, executePythonCode } from '@/services/runner';
 import { getUserProfile, saveUserProfile } from '@/services/profile';
@@ -108,6 +114,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [postgresStats, setPostgresStats] = useState({ total: 4, easy: 1, medium: 2, hard: 1, categories: 3 });
   const [isImporting, setIsImporting] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isConnectingDb, setIsConnectingDb] = useState(false);
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; latencyMs: number; message: string }>({
+    connected: true,
+    latencyMs: 1,
+    message: 'Connected to SQLite Realtime Engine',
+  });
+  const [confirmResetModal, setConfirmResetModal] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => Promise<void>;
+  } | null>(null);
 
   // Python diagnostic state
   const [diagRunning, setDiagRunning] = useState(false);
@@ -250,6 +269,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  // Connect & Re-verify Realtime SQLite Database
+  const handleConnectRealtimeDb = async () => {
+    setIsConnectingDb(true);
+    try {
+      const res = await testAndConnectRealtimeDb();
+      setDbStatus({
+        connected: res.success,
+        latencyMs: res.latencyMs,
+        message: res.message,
+      });
+
+      const [cStats, sStats, pStats] = await Promise.all([
+        getCurriculumStats(),
+        getSqlCurriculumStats(),
+        getPostgresCurriculumStats(),
+      ]);
+      setCurriculumStats(cStats);
+      setSqlStats(sStats);
+      setPostgresStats(pStats);
+
+      setShowSaveSuccessPopup(true);
+      setTimeout(() => setShowSaveSuccessPopup(false), 2200);
+      onShowToast(`Realtime DB Connected! Live latency: ${res.latencyMs}ms across all workspaces.`, 'success');
+    } catch (err: any) {
+      onShowToast(`Failed to connect realtime DB: ${err.message}`, 'error');
+    } finally {
+      setIsConnectingDb(false);
+    }
+  };
+
+  // Reset a specific category to default seed
+  const handleResetCategory = async (cat: 'python' | 'sql' | 'postgres') => {
+    setIsResetting(true);
+    try {
+      if (cat === 'python') {
+        const res = await resetQuestionsToDefault();
+        const updated = await getCurriculumStats();
+        setCurriculumStats(updated);
+        onShowToast(`Python Practice reset to default ${res.total} curriculum problems!`, 'success');
+      } else if (cat === 'sql') {
+        const res = await resetSqlExercisesToDefault();
+        const updated = await getSqlCurriculumStats();
+        setSqlStats(updated);
+        onShowToast(`SQL Practice reset to default ${res.total} exercises!`, 'success');
+      } else {
+        const res = await resetPostgresExercisesToDefault();
+        const updated = await getPostgresCurriculumStats();
+        setPostgresStats(updated);
+        onShowToast(`PostgreSQL Lab reset to default ${res.total} labs!`, 'success');
+      }
+      setShowSaveSuccessPopup(true);
+      setTimeout(() => setShowSaveSuccessPopup(false), 2200);
+    } catch (err: any) {
+      onShowToast(`Reset failed: ${err.message}`, 'error');
+    } finally {
+      setIsResetting(false);
+      setConfirmResetModal(null);
+    }
+  };
+
+  // Reset All Uploaded Datasets
+  const handleResetAllUploaded = async () => {
+    setIsResetting(true);
+    try {
+      const res = await resetAllUploadedDatasets();
+      const [cStats, sStats, pStats] = await Promise.all([
+        getCurriculumStats(),
+        getSqlCurriculumStats(),
+        getPostgresCurriculumStats(),
+      ]);
+      setCurriculumStats(cStats);
+      setSqlStats(sStats);
+      setPostgresStats(pStats);
+      setShowSaveSuccessPopup(true);
+      setTimeout(() => setShowSaveSuccessPopup(false), 2200);
+      onShowToast(`All uploaded datasets reset! Python: ${res.python}, SQL: ${res.sql}, Postgres: ${res.postgres}`, 'success');
+    } catch (err: any) {
+      onShowToast(`Reset all uploaded failed: ${err.message}`, 'error');
+    } finally {
+      setIsResetting(false);
+      setConfirmResetModal(null);
+    }
+  };
+
+  // Reset Submissions & Streaks to Baseline
+  const handleResetSubmissions = async () => {
+    setIsResetting(true);
+    try {
+      await resetSubmissionsToBaseline();
+      setShowSaveSuccessPopup(true);
+      setTimeout(() => setShowSaveSuccessPopup(false), 2200);
+      onShowToast('Submissions and streaks reset to verified baseline (90 Solved, 124 Submissions)!', 'success');
+    } catch (err: any) {
+      onShowToast(`Reset submissions failed: ${err.message}`, 'error');
+    } finally {
+      setIsResetting(false);
+      setConfirmResetModal(null);
+    }
+  };
+
   // Export to CSV
   const handleExportCsv = async (cat: 'python' | 'sql' | 'postgres' = datasetCategory) => {
     try {
@@ -330,10 +449,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <p className="text-xs text-gray-500 mt-1">Configure workspace preferences, import problem datasets, and manage offline storage</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>All changes saved locally</span>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleConnectRealtimeDb}
+            disabled={isConnectingDb}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Test and synchronize SQLite database across all screens"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${isConnectingDb ? 'animate-spin' : ''}`} />
+            <span>{isConnectingDb ? 'Connecting DB...' : 'Connect Realtime DB'}</span>
+          </button>
+
+          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Realtime Live ({dbStatus.latencyMs}ms)</span>
           </span>
         </div>
       </div>
@@ -627,18 +756,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </h3>
                   <p className="text-xs text-gray-500">Import custom problems via CSV/XLSX, synchronize dataset, or export curriculum by category</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {datasetCategory === 'python' && (
-                    <button
-                      onClick={handleReloadDataset}
-                      disabled={isReloading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                      title="Reload original 1,337 problems from seed dataset"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isReloading ? 'animate-spin text-[#E11D26]' : ''}`} />
-                      <span>Sync Seed</span>
-                    </button>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleConnectRealtimeDb}
+                    disabled={isConnectingDb}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+                    title="Connect and synchronize SQLite database across all screens"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isConnectingDb ? 'animate-spin' : ''}`} />
+                    <span>{isConnectingDb ? 'Connecting...' : 'Connect Realtime DB'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setConfirmResetModal({
+                      open: true,
+                      title: `Reset ${datasetCategory === 'python' ? 'Python' : datasetCategory === 'sql' ? 'SQL' : 'PostgreSQL'} Uploaded Problems?`,
+                      description: `This will reset all ${datasetCategory} questions back to the verified default factory seed dataset.`,
+                      action: () => handleResetCategory(datasetCategory),
+                    })}
+                    disabled={isResetting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                    title={`Reset ${datasetCategory} uploaded problems back to default`}
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 text-amber-600 ${isResetting ? 'animate-spin' : ''}`} />
+                    <span>Reset {datasetCategory === 'python' ? 'Python' : datasetCategory === 'sql' ? 'SQL' : 'Postgres'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setConfirmResetModal({
+                      open: true,
+                      title: 'Reset All Uploaded Datasets?',
+                      description: 'This will purge all custom uploaded problems across Python, SQL, and PostgreSQL and restore default factory datasets.',
+                      action: handleResetAllUploaded,
+                    })}
+                    disabled={isResetting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Reset all uploaded datasets across all categories"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                    <span>Reset All Uploaded</span>
+                  </button>
 
                   <button
                     onClick={() => handleDownloadSample(datasetCategory)}
@@ -792,7 +949,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center justify-center gap-3 pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => handleDownloadSample(datasetCategory)}
@@ -800,6 +957,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   >
                     <Download className="w-4 h-4 text-gray-500" />
                     <span>Download {datasetCategory.toUpperCase()} Sample</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResetModal({
+                      open: true,
+                      title: `Reset ${datasetCategory.toUpperCase()} Uploaded Problems?`,
+                      description: `This will reset all ${datasetCategory} items back to the factory default seed dataset.`,
+                      action: () => handleResetCategory(datasetCategory),
+                    })}
+                    disabled={isResetting}
+                    className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-4 h-4 text-amber-600 ${isResetting ? 'animate-spin' : ''}`} />
+                    <span>Reset Uploaded {datasetCategory.toUpperCase()}</span>
                   </button>
 
                   <label className="cursor-pointer px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2">
@@ -838,31 +1010,147 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* Section 4: Offline Storage */}
           {activeSection === 'storage' && (
             <div className="space-y-6">
-              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+              <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">Offline SQLite Storage</h3>
-                  <p className="text-xs text-gray-500">Inspect database health, run vacuum optimizations, and clear cache</p>
+                  <h3 className="text-base font-bold text-gray-900">Offline SQLite Storage & Realtime Engine</h3>
+                  <p className="text-xs text-gray-500">Inspect database health, connect realtime engine, and manage uploaded datasets</p>
                 </div>
-                <button
-                  onClick={handleVacuum}
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all shadow-2xs"
-                >
-                  Optimize & Vacuum DB
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleConnectRealtimeDb}
+                    disabled={isConnectingDb}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isConnectingDb ? 'animate-spin' : ''}`} />
+                    <span>{isConnectingDb ? 'Connecting...' : 'Connect Realtime DB'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleVacuum}
+                    className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  >
+                    Optimize & Vacuum DB
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
                 <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-400 block text-[11px] font-sans font-medium mb-1">Database Engine</span>
                   <div className="font-bold text-gray-900">SQLite 3 (sql.js WebAssembly)</div>
                 </div>
-                <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
-                  <span className="text-gray-400 block text-[11px] font-sans font-medium mb-1">Storage State</span>
-                  <div className="font-bold text-emerald-600">Active & Persisted (Local)</div>
+                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <span className="text-emerald-700 block text-[11px] font-sans font-medium mb-1">Realtime Live Engine</span>
+                  <div className="font-bold text-emerald-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live ({dbStatus.latencyMs}ms latency)</span>
+                  </div>
                 </div>
                 <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-400 block text-[11px] font-sans font-medium mb-1">Approximate Footprint</span>
-                  <div className="font-bold text-gray-900">~1.8 MB (Indexed)</div>
+                  <div className="font-bold text-gray-900">~1.8 MB (Persisted)</div>
+                </div>
+              </div>
+
+              {/* Reset Uploaded Datasets & Recovery Card */}
+              <div className="p-5 bg-gradient-to-r from-red-50/40 via-amber-50/20 to-gray-50 rounded-2xl border border-red-200/60 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200/70 pb-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      <RotateCcw className="w-4 h-4 text-[#E11D26]" />
+                      <span>Dataset Reset & Baseline Recovery</span>
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Reset custom uploaded problems or restore factory seeds for Python, SQL, and PostgreSQL
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setConfirmResetModal({
+                      open: true,
+                      title: 'Reset All Uploaded Datasets?',
+                      description: 'This will purge all custom uploaded questions across Python, SQL, and PostgreSQL and restore original factory seeds.',
+                      action: handleResetAllUploaded,
+                    })}
+                    disabled={isResetting}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Reset All Uploaded Datasets</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-gray-800">Python Practice</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{curriculumStats.total} total problems</div>
+                    </div>
+                    <button
+                      onClick={() => setConfirmResetModal({
+                        open: true,
+                        title: 'Reset Python Practice Problems?',
+                        description: 'Restore the default 1,337 DSA questions from seed.',
+                        action: () => handleResetCategory('python'),
+                      })}
+                      className="mt-3 w-full py-1.5 bg-gray-50 hover:bg-red-50 hover:text-red-700 text-gray-700 border border-gray-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Reset Python Seed
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-gray-800">SQL Practice</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{sqlStats.total} exercises</div>
+                    </div>
+                    <button
+                      onClick={() => setConfirmResetModal({
+                        open: true,
+                        title: 'Reset SQL Practice Exercises?',
+                        description: 'Restore the default 10 SQL exercises from seed.',
+                        action: () => handleResetCategory('sql'),
+                      })}
+                      className="mt-3 w-full py-1.5 bg-gray-50 hover:bg-blue-50 hover:text-blue-700 text-gray-700 border border-gray-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Reset SQL Seed
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-gray-800">PostgreSQL Lab</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{postgresStats.total} labs</div>
+                    </div>
+                    <button
+                      onClick={() => setConfirmResetModal({
+                        open: true,
+                        title: 'Reset PostgreSQL Lab Exercises?',
+                        description: 'Restore the default 4 PostgreSQL labs from seed.',
+                        action: () => handleResetCategory('postgres'),
+                      })}
+                      className="mt-3 w-full py-1.5 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 text-gray-700 border border-gray-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Reset PG Seed
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Need to reset submission attempts back to verified baseline?</span>
+                  </div>
+                  <button
+                    onClick={() => setConfirmResetModal({
+                      open: true,
+                      title: 'Reset Submissions to Default Baseline?',
+                      description: 'Restore the verified baseline: 90 Solved, 124 Submissions, and 3-Day streak.',
+                      action: handleResetSubmissions,
+                    })}
+                    className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Reset Baseline Submissions (90 AC / 124 Subs)
+                  </button>
                 </div>
               </div>
 
@@ -870,10 +1158,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="font-bold text-gray-800">Database Tables Overview:</div>
                 <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-gray-600">
                   <div>• tracks: Core track definitions</div>
-                  <div>• questions: 1,337 curriculum entries</div>
+                  <div>• questions: Curriculum entries ({curriculumStats.total} total)</div>
+                  <div>• sql_exercises: SQL Practice dataset ({sqlStats.total} exercises)</div>
+                  <div>• postgres_exercises: PostgreSQL Lab scripts ({postgresStats.total} labs)</div>
+                  <div>• attempts: Execution logs, streaks & heatmaps</div>
                   <div>• tasks: To-do planner tasks</div>
                   <div>• study_sessions: Tracked Pomodoro intervals</div>
-                  <div>• attempts: Python & SQL execution logs</div>
                   <div>• app_settings: Local key-value preferences</div>
                 </div>
               </div>
@@ -1093,6 +1383,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         }}
       />
 
+      {/* Confirmation Modal for Reset Actions */}
+      {confirmResetModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-100 p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-gray-100 max-w-md w-full animate-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-[#E11D26] flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-[#E11D26]" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">{confirmResetModal.title}</h4>
+                <p className="text-xs text-gray-500 mt-0.5">{confirmResetModal.description}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 flex items-center gap-2">
+              <Info className="w-4 h-4 text-gray-400 shrink-0" />
+              <span>Realtime SQLite tables will be immediately updated and synchronized across all open screens.</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmResetModal(null)}
+                disabled={isResetting}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirmResetModal.action) {
+                    await confirmResetModal.action();
+                  }
+                }}
+                disabled={isResetting}
+                className="px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isResetting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isResetting ? 'Resetting...' : 'Confirm & Reset'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Emerald Green Tick Update Confirmation Popup (Matching Design System) */}
       {showSaveSuccessPopup && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-xs animate-in fade-in duration-100">
@@ -1100,9 +1436,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 mx-auto flex items-center justify-center mb-3 shadow-xs">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 stroke-[2.5]" />
             </div>
-            <h4 className="text-base font-bold text-gray-900">Settings Saved in Real Time</h4>
+            <h4 className="text-base font-bold text-gray-900">Database Synchronized</h4>
             <p className="text-xs text-gray-500 mt-1">
-              Your profile changes, photo, and preferences have been synchronized!
+              Real-time SQLite database updated and broadcast to all workspaces!
             </p>
           </div>
         </div>

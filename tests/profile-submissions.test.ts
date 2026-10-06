@@ -9,7 +9,12 @@ import {
   recalculateStreaks, 
   persistDatabase,
   clearSubmissionsForTesting,
-  seedBaselineAttempts
+  seedBaselineAttempts,
+  resetQuestionsToDefault,
+  resetSqlExercisesToDefault,
+  resetPostgresExercisesToDefault,
+  resetAllUploadedDatasets,
+  testAndConnectRealtimeDb
 } from '../src/services/db';
 
 describe('Profile, Real-time Submissions & Streaks Engine', () => {
@@ -249,5 +254,43 @@ describe('Profile, Real-time Submissions & Streaks Engine', () => {
     const checkRes = reloadedDb.exec(`SELECT COUNT(*) FROM attempts`);
     const count = checkRes[0].values[0][0];
     expect(count).toBe(initialStats.totalSubmissions);
+  });
+
+  it('8. should reset uploaded datasets to default factory seeds', async () => {
+    const db = await getDatabase();
+
+    // Insert dummy uploaded custom questions
+    db.run(
+      `INSERT INTO questions (id, subtopic_id, track_slug, pattern_name, subtopic_name, title, platform, difficulty, practice_link, video_link, hint_link, xp, status, order_num)
+       VALUES ('custom-test-q', '', 'core-dsa', 'Custom Pattern', 'Custom Sub', 'Custom Uploaded Problem', 'Custom', 'Easy', '', '', '', 10, 'todo', 99999)`
+    );
+
+    // Insert dummy uploaded SQL exercise
+    db.run(
+      `INSERT INTO sql_exercises (id, title, difficulty, category, description, schema_sql, seed_sql, initial_query, solution_sql, expected_output_json, input_ascii, output_ascii, explanation, image_url)
+       VALUES ('custom-sql-q', 'Custom SQL Upload', 'Easy', 'CUSTOM', 'Desc', 'CREATE TABLE t (x INT);', 'INSERT INTO t VALUES (1);', 'SELECT * FROM t;', 'SELECT * FROM t;', '[]', '', '', '', '')`
+    );
+
+    // Reset all uploaded
+    const resetRes = await resetAllUploadedDatasets();
+    expect(resetRes.python).toBe(1337);
+    expect(resetRes.sql).toBe(11);
+    expect(resetRes.postgres).toBe(4);
+
+    // Custom items should be gone
+    const checkCustomQ = db.exec(`SELECT COUNT(*) FROM questions WHERE id = 'custom-test-q'`);
+    expect(checkCustomQ[0].values[0][0]).toBe(0);
+
+    const checkCustomSql = db.exec(`SELECT COUNT(*) FROM sql_exercises WHERE id = 'custom-sql-q'`);
+    expect(checkCustomSql[0].values[0][0]).toBe(0);
+  });
+
+  it('9. should test and connect realtime DB with verified status and latency', async () => {
+    const res = await testAndConnectRealtimeDb();
+    expect(res.success).toBe(true);
+    expect(res.latencyMs).toBeGreaterThanOrEqual(1);
+    expect(res.tablesCount).toBeGreaterThanOrEqual(6);
+    expect(res.questionsCount).toBeGreaterThanOrEqual(1337);
+    expect(res.message).toContain('Connected to SQLite Wasm Realtime Database');
   });
 });

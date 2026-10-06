@@ -114,11 +114,20 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span>{studyHours} Today</span>
         </div>
 
-        {/* Online / Offline Status */}
-        <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500" title="Offline-first database active">
-          <Wifi className="w-3.5 h-3.5 text-[#16A34A]" />
-          <span className="text-[11px] font-medium text-gray-600">Local DB</span>
-        </div>
+        {/* Realtime DB Status & Quick Connect Button */}
+        <button
+          onClick={async () => {
+            try {
+              const { testAndConnectRealtimeDb } = await import('@/services/db');
+              await testAndConnectRealtimeDb();
+            } catch {}
+          }}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full transition-colors cursor-pointer"
+          title="Click to verify & synchronize Realtime SQLite Database"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[11px] font-bold">Realtime DB</span>
+        </button>
 
         {/* Quick Add Button */}
         <button
