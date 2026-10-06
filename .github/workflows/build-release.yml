@@ -1,0 +1,56 @@
+name: Build & Package Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm run test
+
+      - name: Build Frontend & Native App
+        run: npm run tauri build
+
+      - name: Compile Inno Setup Installer
+        shell: powershell
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
+
+      - name: Generate Checksum
+        shell: powershell
+        run: |
+          $hash = Get-FileHash -Path "release\installer\Ap_Setup_v1.0.0_x64.exe" -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath "release\installer\SHA256SUMS.txt"
+          Write-Host "SHA256: $($hash.Hash)"
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ap-Windows-Installer
+          path: release/installer/
