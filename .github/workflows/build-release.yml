@@ -40,7 +40,17 @@ jobs:
       - name: Compile Inno Setup Installer
         shell: powershell
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if ($iscc) {
+            & iscc "installer\ap_installer.iss"
+          } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
+          } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+            & "C:\Program Files\Inno Setup 6\ISCC.exe" "installer\ap_installer.iss"
+          } else {
+            Write-Error "ISCC.exe not found on runner"
+            exit 1
+          }
 
       - name: Generate Checksum
         shell: powershell
