@@ -40,6 +40,13 @@ jobs:
       - name: Compile Inno Setup Installer
         shell: powershell
         run: |
+          if (-not (Test-Path "src-tauri\target\release\Ap.exe")) {
+            Write-Error "Fatal: src-tauri\target\release\Ap.exe was not created by tauri build. Aborting installer packaging."
+            exit 1
+          }
+          $exeSize = (Get-Item "src-tauri\target\release\Ap.exe").Length
+          Write-Host "Verified native binary Ap.exe ($exeSize bytes)"
+
           $iscc = Get-Command iscc -ErrorAction SilentlyContinue
           if ($iscc) {
             & iscc "installer\ap_installer.iss"
