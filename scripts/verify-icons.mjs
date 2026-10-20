@@ -29,10 +29,10 @@ function parseIco(filePath) {
   return { type, count, entries, totalSize: buffer.length };
 }
 
-console.log('--- Checking src-tauri/icons ---');
-const tauriIcons = fs.readdirSync('src-tauri/icons');
-for (const file of tauriIcons) {
-  const full = path.join('src-tauri/icons', file);
+console.log('--- Checking build icons ---');
+const buildIcons = fs.readdirSync('build');
+for (const file of buildIcons) {
+  const full = path.join('build', file);
   if (file.endsWith('.png')) {
     const info = readPngDimensions(full);
     console.log(`  ${file}: ${info.width}x${info.height} (${info.size} bytes)`);

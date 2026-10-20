@@ -1,9 +1,7 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
+import '@/services/monaco/setup';
 import * as monaco from 'monaco-editor';
-import Editor, { OnMount, loader } from '@monaco-editor/react';
-
-// Guarantee 100% offline Monaco operation without CDN calls
-loader.config({ monaco });
+import Editor, { OnMount } from '@monaco-editor/react';
 import { 
   AlertCircle, 
   RefreshCw, 
@@ -35,8 +33,8 @@ export interface MonacoCodeEditorHandle {
 export interface MonacoCodeEditorProps {
   value: string;
   onChange: (value: string) => void;
-  workspace?: 'python' | 'sql' | 'postgres';
-  language?: string; // e.g. 'python', 'sql', 'cpp', etc.
+  workspace?: 'python' | 'practice' | 'sql' | 'postgres';
+  language?: string; // e.g. 'python', 'java', 'cpp', 'sql', etc.
   selectedLanguageId?: string;
   onLanguageChange?: (lang: LanguageOption) => void;
   theme?: 'vs-dark' | 'vs-light';
@@ -47,12 +45,13 @@ export interface MonacoCodeEditorProps {
   showToolbar?: boolean;
   showStatusBar?: boolean;
   title?: string;
+  runtimeStatusMap?: Record<string, { installed: boolean; status?: string; version?: string }>;
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(({
   value,
   onChange,
-  workspace = 'python',
+  workspace = 'practice',
   language = 'python',
   selectedLanguageId = 'python3',
   onLanguageChange,
@@ -64,6 +63,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   showToolbar = true,
   showStatusBar = true,
   title = 'Code',
+  runtimeStatusMap = {},
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -258,6 +258,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
               selectedLanguageId={selectedLanguageId}
               onSelectLanguage={handleSelectLanguage}
               disabled={readOnly}
+              runtimeStatusMap={runtimeStatusMap}
             />
 
             <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 bg-[#1C212D] border border-neutral-700/50">

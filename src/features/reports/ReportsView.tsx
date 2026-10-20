@@ -25,6 +25,7 @@ import {
 import { ScreenId } from '@/types';
 import { 
   getConnectedServices, 
+  fetchConnectedServices,
   sendTelegramAlert, 
   sendTwilioAlert,
   sendGoogleSheetsSync,
@@ -33,8 +34,10 @@ import {
   saveAutomationSchedule,
   getQueuedNotifications,
   processOfflineQueue,
-  AutomationSchedule
+  AutomationSchedule,
+  ConnectedService
 } from '@/services/notifications';
+import { ConfigureServiceModal } from '@/components/dialogs/ConfigureServiceModal';
 
 interface ReportsViewProps {
   onNavigate: (screen: ScreenId) => void;
@@ -51,13 +54,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [isTestingService, setIsTestingService] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null);
   const [selectedServiceForAutomation, setSelectedServiceForAutomation] = useState<string | null>(null);
+  const [activeConfigureService, setActiveConfigureService] = useState<string | null>(null);
+  const [servicesList, setServicesList] = useState<ConnectedService[]>(getConnectedServices());
 
-  const connectedServices = getConnectedServices();
+  const refreshServices = async () => {
+    try {
+      const svcs = await fetchConnectedServices();
+      setServicesList(svcs);
+    } catch {}
+  };
 
   useEffect(() => {
     const s = getAutomationSchedule();
     setSchedule(s);
     setQueuedCount(getQueuedNotifications().length);
+    refreshServices();
   }, []);
 
   const handleToggleScheduleActive = () => {
@@ -206,13 +217,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <h3 className="text-sm font-bold text-gray-900">Configured External Services</h3>
               <p className="text-xs text-gray-500">Protected credentials loaded securely from local vault</p>
             </div>
-            <span className="text-[11px] font-mono text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-              Auto-Sync Online
+            <span className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border ${
+              servicesList.some(s => s.id !== 'local' && s.status === 'connected')
+                ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                : 'text-gray-500 bg-gray-100 border-gray-200'
+            }`}>
+              {servicesList.some(s => s.id !== 'local' && s.status === 'connected') ? 'Auto-Sync Online' : 'Credentials Setup Needed'}
             </span>
           </div>
 
           <div className="space-y-3">
-            {connectedServices.map((svc) => (
+            {servicesList.map((svc) => (
               <div
                 key={svc.id}
                 className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-white hover:border-gray-200 transition-all flex items-start justify-between gap-4"
@@ -241,6 +256,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {svc.id !== 'local' && (
+                    <button
+                      onClick={() => setActiveConfigureService(svc.id)}
+                      className="px-2.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-lg text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-95"
+                    >
+                      Configure
+                    </button>
+                  )}
                   <button
                     onClick={() => handleTestService(svc.id)}
                     disabled={isTestingService === svc.id}
@@ -250,7 +273,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </button>
                   <button
                     onClick={() => setSelectedServiceForAutomation(svc.id)}
-                    className="px-2.5 py-1.5 bg-[#E11D26]/10 hover:bg-[#E11D26]/20 text-[#E11D26] border border-[#E11D26]/20 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
                     Schedule
                   </button>
@@ -435,6 +458,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         </div>
       </div>
+
+      <ConfigureServiceModal
+        isOpen={Boolean(activeConfigureService)}
+        serviceId={activeConfigureService}
+        onClose={() => setActiveConfigureService(null)}
+        onSuccess={(msg) => onShowToast(msg, 'success')}
+        onServicesUpdated={refreshServices}
+      />
     </div>
   );
 };

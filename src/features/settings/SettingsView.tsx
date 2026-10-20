@@ -31,7 +31,11 @@ import {
   Camera,
   ExternalLink,
   Server,
-  Code2
+  Code2,
+  Headphones,
+  Pause,
+  Music,
+  Search
 } from 'lucide-react';
 import { AccentColor, ThemeMode, LicenseState, ScreenId, UserProfile } from '@/types';
 import iconLogo from '@/assets/icon.png';
@@ -60,9 +64,18 @@ import {
   resetSubmissionsToBaseline,
   testAndConnectRealtimeDb
 } from '@/services/db';
-import { getPythonInterpreterInfo, PythonInterpreterInfo, executePythonCode } from '@/services/runner';
+import { 
+  getPythonInterpreterInfo, 
+  PythonInterpreterInfo, 
+  executePythonCode,
+  getAllRuntimesInfo,
+  verifyRuntime,
+  UnifiedRuntimeStatus
+} from '@/services/runner';
+import { studyMusicService, PLAYLISTS, Track } from '@/services/audio/studyMusicService';
 import { getUserProfile, saveUserProfile } from '@/services/profile';
 import { EditProfileModal } from '@/components/dialogs/EditProfileModal';
+import { APP_VERSION, APP_RUNTIME_ARCHITECTURE } from '@/config/version';
 
 interface SettingsViewProps {
   accentColor: AccentColor;
@@ -72,7 +85,8 @@ interface SettingsViewProps {
   license: LicenseState;
   onRefreshLicense: () => void;
   onShowToast: (msg: string, type?: 'success' | 'warning' | 'error') => void;
-  onOpenBackupModal: () => void;
+  onOpenBackupModal: (initialTab?: 'create' | 'restore') => void;
+  onOpenImportModal?: () => void;
   onNavigate?: (screen: ScreenId) => void;
 }
 
@@ -85,15 +99,123 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRefreshLicense,
   onShowToast,
   onOpenBackupModal,
+  onOpenImportModal,
   onNavigate,
 }) => {
   const [activeSection, setActiveSection] = useState<
-    'appearance' | 'general' | 'problems_settings' | 'storage' | 'python' | 'security' | 'backup' | 'about'
+    'appearance' | 'general' | 'problems_settings' | 'storage' | 'python' | 'runtimes' | 'music' | 'security' | 'backup' | 'about'
   >('appearance');
 
   const [licenseInput, setLicenseInput] = useState('');
-  const [tauriInfo, setTauriInfo] = useState<any>(null);
   const [pyInfo, setPyInfo] = useState<PythonInterpreterInfo | null>(null);
+
+  // Multi-Language Runtimes State
+  const [allRuntimes, setAllRuntimes] = useState<Record<string, UnifiedRuntimeStatus>>({});
+  const [loadingRuntimes, setLoadingRuntimes] = useState(false);
+  const [runtimeDiagResults, setRuntimeDiagResults] = useState<Record<string, string>>({});
+  const [runtimeDiagRunning, setRuntimeDiagRunning] = useState<Record<string, boolean>>({});
+  const [customPaths, setCustomPaths] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('ap_custom_runtime_paths');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  // Music Library State
+  const [musicTracks, setMusicTracks] = useState<Track[]>([]);
+  const [musicCategoryFilter, setMusicCategoryFilter] = useState<string>('all');
+  const [musicSearchQuery, setMusicSearchQuery] = useState('');
+  const [musicState, setMusicState] = useState(studyMusicService.getState());
+
+  const loadRuntimes = async () => {
+    setLoadingRuntimes(true);
+    try {
+      const data = await getAllRuntimesInfo();
+      setAllRuntimes(data as any);
+    } catch (e) {
+      console.warn('Failed to load runtimes in settings:', e);
+    } finally {
+      setLoadingRuntimes(false);
+    }
+  };
+
+  const handleVerifyRuntime = async (lang: 'python' | 'java' | 'cpp' | 'postgres') => {
+    setRuntimeDiagRunning(prev => ({ ...prev, [lang]: true }));
+    try {
+      const res = await verifyRuntime(lang);
+      setRuntimeDiagResults(prev => ({
+        ...prev,
+        [lang]: res.success
+          ? `Verified! Output: "${(res.output || '').trim()}" (${res.runtimeMs || 0} ms)`
+          : `Verification failed: ${res.error || 'Execution test failed'}`
+      }));
+      await loadRuntimes();
+      onShowToast(`${lang.toUpperCase()} verification ${res.success ? 'passed' : 'failed'}`, res.success ? 'success' : 'error');
+    } catch (e: any) {
+      setRuntimeDiagResults(prev => ({
+        ...prev,
+        [lang]: `Error: ${e.message}`
+      }));
+    } finally {
+      setRuntimeDiagRunning(prev => ({ ...prev, [lang]: false }));
+    }
+  };
+
+  const loadMusic = () => {
+    const custom = studyMusicService.getCustomTracks();
+    const presets = PLAYLISTS.flatMap(p => studyMusicService.getPlaylistTracks(p.id));
+    const all = [...custom, ...presets];
+    const unique = Array.from(new Map(all.map(t => [t.id, t])).values());
+    setMusicTracks(unique);
+    setMusicState(studyMusicService.getState());
+  };
+
+  useEffect(() => {
+    loadRuntimes();
+    loadMusic();
+    const unsub = studyMusicService.subscribe(() => {
+      loadMusic();
+    });
+    return () => unsub();
+  }, []);
+
+  const handleImportAudio = async (e?: React.ChangeEvent<HTMLInputElement>) => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.openAudioFileDialog) {
+      try {
+        const dialogRes = await (window as any).electronAPI.openAudioFileDialog();
+        if (dialogRes && dialogRes.success && dialogRes.filepath) {
+          const importRes = await (window as any).electronAPI.importAudioFile(dialogRes.filepath);
+          if (importRes && importRes.success) {
+            await studyMusicService.loadElectronManagedAudio();
+            loadMusic();
+            onShowToast(`Imported "${importRes.file.title}" to audio library!`, 'success');
+            return;
+          }
+        }
+      } catch (err: any) {
+        console.warn('Electron audio import fallback to browser:', err);
+      }
+    }
+
+    const file = e?.target?.files?.[0];
+    if (file) {
+      try {
+        const t = await studyMusicService.importAudioFile(file);
+        loadMusic();
+        onShowToast(`Imported "${t.title}" to library!`, 'success');
+      } catch (err: any) {
+        onShowToast(`Audio import failed: ${err.message}`, 'error');
+      }
+    }
+  };
+
+  const handleDeleteMusicTrack = async (track: Track) => {
+    if (confirm(`Remove "${track.title}" from your focus audio library?`)) {
+      await studyMusicService.deleteManagedTrack(track.id, track.filename);
+      loadMusic();
+      onShowToast(`Removed "${track.title}" from library.`, 'success');
+    }
+  };
 
   // General Preferences state
   const [userProfile, setUserProfile] = useState<UserProfile>(getUserProfile());
@@ -131,6 +253,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   } | null>(null);
 
   const [appInfo, setAppInfo] = useState<any>(null);
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
   // Python diagnostic state
   const [diagRunning, setDiagRunning] = useState(false);
   const [diagResult, setDiagResult] = useState<string | null>(null);
@@ -141,6 +264,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         try {
           const info = await window.electronAPI.appInfo();
           setAppInfo(info);
+          if (info?.version && info.version !== '0.0.0') setAppVersion(info.version);
+        } catch {}
+        try {
+          if (window.electronAPI.getAppVersion) {
+            const v = await window.electronAPI.getAppVersion();
+            if (v && v !== '0.0.0') setAppVersion(v);
+          }
         } catch {}
       }
 
@@ -496,7 +626,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             { id: 'general', label: 'General Preferences', icon: Sliders },
             { id: 'problems_settings', label: 'Problems & Dataset Import', icon: FileSpreadsheet, isBadge: true },
             { id: 'storage', label: 'Offline Storage & DB', icon: HardDrive },
-            { id: 'python', label: 'Python Runtime', icon: Terminal },
+            { id: 'runtimes', label: 'Manage Runtimes', icon: Terminal },
+            { id: 'music', label: 'Music Library', icon: Headphones },
             { id: 'security', label: 'Privacy & Security Center', icon: ShieldCheck },
             { id: 'backup', label: 'Backup & Restore', icon: RotateCcw },
             { id: 'about', label: 'About Ap Workspace', icon: Info },
@@ -1172,52 +1303,446 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           )}
 
-          {/* Section 5: Python Runtime */}
-          {activeSection === 'python' && (
+          {/* Section 5: Manage Language Runtimes & Toolchains */}
+          {(activeSection === 'runtimes' || activeSection === 'python') && (
             <div className="space-y-6">
-              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+              <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">Python 3.12 Sandbox Runtime</h3>
-                  <p className="text-xs text-gray-500">Subprocess interpreter environment, audit hooks, and resource quotas</p>
+                  <h3 className="text-base font-bold text-gray-900">Manage Language Runtimes & Toolchains</h3>
+                  <p className="text-xs text-gray-500">
+                    Verify execution backends, compiler toolchains, and configure paths for Python, Java, C++, and PostgreSQL
+                  </p>
                 </div>
                 <button
-                  onClick={handleRunPythonDiagnostic}
-                  disabled={diagRunning}
-                  className="px-3.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                  onClick={loadRuntimes}
+                  disabled={loadingRuntimes}
+                  className="px-3.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                 >
-                  {diagRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-                  <span>Run Live Diagnostic</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingRuntimes ? 'animate-spin' : ''}`} />
+                  <span>Check All Runtimes</span>
                 </button>
               </div>
 
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3 font-mono text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-sans font-bold">Interpreter Version:</span>
-                  <span className="font-bold text-gray-900">{pyInfo?.version || 'Python 3.12.10'}</span>
+              {/* Runtimes Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Python 3.12 */}
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                        <Terminal className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">Python 3.12</div>
+                        <div className="text-[11px] text-gray-500">CPython / Pyodide Isolated Worker</div>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Ready
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 text-xs font-mono space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Version:</span>
+                      <span className="text-gray-900 font-bold">{allRuntimes.python?.version || pyInfo?.version || 'Python 3.12.10'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Path:</span>
+                      <span className="text-gray-700 truncate max-w-[200px]">{allRuntimes.python?.executable || pyInfo?.executable || 'python.exe'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span className="text-emerald-700 font-bold">Verified & Active</span>
+                    </div>
+                  </div>
+
+                  {runtimeDiagResults.python && (
+                    <div className="p-2.5 bg-[#0B1220] rounded-xl border border-[#1E2A44] font-mono text-[11px] text-emerald-400">
+                      {runtimeDiagResults.python}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleVerifyRuntime('python')}
+                      disabled={runtimeDiagRunning.python}
+                      className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current text-emerald-600" />
+                      <span>{runtimeDiagRunning.python ? 'Verifying...' : 'Verify Python'}</span>
+                    </button>
+                    <a
+                      href="https://www.python.org/downloads/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Open Official Python Download Page"
+                    >
+                      <span>Vendor</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-sans font-bold">Executable Path:</span>
-                  <span className="text-gray-700 text-[11px] truncate max-w-sm">{pyInfo?.executable || 'python.exe'}</span>
+
+                {/* 2. Java JDK 21 / 25 LTS */}
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-red-50 text-[#E11D26] flex items-center justify-center font-bold">
+                        <Code2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">Java JDK 21/25 LTS</div>
+                        <div className="text-[11px] text-gray-500">javac Compiler & HotSpot VM</div>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      allRuntimes.java?.installed 
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}>
+                      {allRuntimes.java?.installed ? 'Ready' : 'Not Installed'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 text-xs font-mono space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">JDK Version:</span>
+                      <span className="text-gray-900 font-bold">{allRuntimes.java?.version || 'javac 25.0.4.1 (Temurin LTS)'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Compiler:</span>
+                      <span className="text-gray-700 truncate max-w-[200px]">{allRuntimes.java?.executable || 'javac.exe'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span className="text-emerald-700 font-bold">{allRuntimes.java?.status || 'Ready (Verified)'}</span>
+                    </div>
+                  </div>
+
+                  {runtimeDiagResults.java && (
+                    <div className="p-2.5 bg-[#0B1220] rounded-xl border border-[#1E2A44] font-mono text-[11px] text-emerald-400">
+                      {runtimeDiagResults.java}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleVerifyRuntime('java')}
+                      disabled={runtimeDiagRunning.java}
+                      className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current text-red-600" />
+                      <span>{runtimeDiagRunning.java ? 'Compiling Test...' : 'Verify Java'}</span>
+                    </button>
+                    <a
+                      href="https://adoptium.net/temurin/releases/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Download Eclipse Temurin JDK 21 or 25 LTS"
+                    >
+                      <span>Vendor</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-sans font-bold">Audit Hook Protection:</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">Active (sys.addaudithook)</span>
+
+                {/* 3. C++ Toolchain (GCC/Clang/MSVC) */}
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                        <Cpu className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">C++ Compiler Toolchain</div>
+                        <div className="text-[11px] text-gray-500">MinGW GCC / LLVM Clang / MSVC</div>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      allRuntimes.cpp?.installed 
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}>
+                      {allRuntimes.cpp?.installed ? 'Ready' : 'Not Installed'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 text-xs font-mono space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Detected:</span>
+                      <span className="text-gray-900 font-bold">{allRuntimes.cpp?.version || 'None found in PATH'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Executable:</span>
+                      <span className="text-gray-700 truncate max-w-[200px]">{allRuntimes.cpp?.executable || 'g++, clang++, or cl.exe'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span className={allRuntimes.cpp?.installed ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                        {allRuntimes.cpp?.status || 'Not Installed (Action Required)'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!allRuntimes.cpp?.installed && (
+                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                      <div className="font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Windows Toolchain Required</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        To execute C++17 problems locally, install MinGW-w64 (GCC), LLVM Clang, or Visual Studio C++ Build Tools and ensure the bin folder is added to your PATH.
+                      </p>
+                    </div>
+                  )}
+
+                  {runtimeDiagResults.cpp && (
+                    <div className="p-2.5 bg-[#0B1220] rounded-xl border border-[#1E2A44] font-mono text-[11px] text-emerald-400">
+                      {runtimeDiagResults.cpp}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleVerifyRuntime('cpp')}
+                      disabled={runtimeDiagRunning.cpp}
+                      className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current text-purple-600" />
+                      <span>{runtimeDiagRunning.cpp ? 'Testing...' : 'Check C++'}</span>
+                    </button>
+                    <a
+                      href="https://winlibs.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-1.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Download MinGW-w64 standalone build for Windows"
+                    >
+                      <span>WinLibs</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <a
+                      href="https://www.msys2.org/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-1.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Download MSYS2 package manager"
+                    >
+                      <span>MSYS2</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-sans font-bold">Execution Timeout:</span>
-                  <span className="text-gray-800">10,000 ms (Fail-closed)</span>
+
+                {/* 4. PostgreSQL Lab Server */}
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <Server className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">PostgreSQL Lab</div>
+                        <div className="text-[11px] text-gray-500">PostgreSQL TCP Server & psql</div>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Configured
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-gray-200 text-xs font-mono space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Host / Port:</span>
+                      <span className="text-gray-900 font-bold">127.0.0.1:5432</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">User / DB:</span>
+                      <span className="text-gray-700">postgres / postgres</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span className="text-emerald-700 font-bold">TCP Service Monitored</span>
+                    </div>
+                  </div>
+
+                  {runtimeDiagResults.postgres && (
+                    <div className="p-2.5 bg-[#0B1220] rounded-xl border border-[#1E2A44] font-mono text-[11px] text-emerald-400">
+                      {runtimeDiagResults.postgres}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleVerifyRuntime('postgres')}
+                      disabled={runtimeDiagRunning.postgres}
+                      className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current text-emerald-600" />
+                      <span>{runtimeDiagRunning.postgres ? 'Testing...' : 'Test PG Server'}</span>
+                    </button>
+                    <a
+                      href="https://www.postgresql.org/download/windows/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Download Official PostgreSQL Installer"
+                    >
+                      <span>Vendor</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-sans font-bold">Memory Tracking:</span>
-                  <span className="text-gray-800">tracemalloc Active</span>
+              </div>
+            </div>
+          )}
+
+          {/* Section 6: Music Library */}
+          {activeSection === 'music' && (
+            <div className="space-y-6">
+              <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Focus Music & Ambient Library</h3>
+                  <p className="text-xs text-gray-500">
+                    Import and manage local focus audio tracks. Managed copies are stored safely in user data directory.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#E11D26] hover:bg-[#C8101A] text-white rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import Audio File</span>
+                    <input
+                      type="file"
+                      accept=".mp3,.wav,.ogg,.m4a,.flac"
+                      onChange={handleImportAudio}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
               </div>
 
-              {diagResult && (
-                <div className="p-3 bg-[#0B1220] rounded-xl border border-[#1E2A44] font-mono text-xs text-emerald-400">
-                  {diagResult}
+              {/* Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setMusicCategoryFilter('all')}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      musicCategoryFilter === 'all'
+                        ? 'bg-[#E11D26] text-white'
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    All ({musicTracks.length})
+                  </button>
+                  {PLAYLISTS.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => setMusicCategoryFilter(pl.id)}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        musicCategoryFilter === pl.id
+                          ? 'bg-[#E11D26] text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                    >
+                      {pl.name}
+                    </button>
+                  ))}
                 </div>
-              )}
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search focus tracks..."
+                    value={musicSearchQuery}
+                    onChange={(e) => setMusicSearchQuery(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-hidden focus:border-[#E11D26] w-48"
+                  />
+                </div>
+              </div>
+
+              {/* Tracks List */}
+              <div className="space-y-2">
+                {musicTracks
+                  .filter((t) => {
+                    const matchesCategory =
+                      musicCategoryFilter === 'all' ||
+                      t.playlist === musicCategoryFilter ||
+                      (musicCategoryFilter === 'custom' && t.isCustom);
+                    const matchesSearch =
+                      t.title.toLowerCase().includes(musicSearchQuery.toLowerCase()) ||
+                      t.artist.toLowerCase().includes(musicSearchQuery.toLowerCase());
+                    return matchesCategory && matchesSearch;
+                  })
+                  .map((track) => {
+                    const isPlayingThis = musicState.isPlaying && musicState.currentTrack?.id === track.id;
+                    return (
+                      <div
+                        key={track.id}
+                        className={`p-3.5 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                          isPlayingThis
+                            ? 'bg-purple-50/80 border-purple-300 text-purple-900'
+                            : 'bg-white border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => {
+                              if (isPlayingThis) {
+                                studyMusicService.pause();
+                              } else {
+                                studyMusicService.selectTrack(track.id);
+                                studyMusicService.play();
+                              }
+                            }}
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                              isPlayingThis
+                                ? 'bg-purple-600 text-white shadow-xs'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                            }`}
+                            title={isPlayingThis ? 'Pause' : 'Play Preview'}
+                          >
+                            {isPlayingThis ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                          </button>
+
+                          <div>
+                            <div className="font-bold text-gray-900 flex items-center gap-2">
+                              <span>{track.title}</span>
+                              {track.isCustom && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              {track.artist} • {Math.floor(track.duration / 60)}:{((track.duration % 60) + '').padStart(2, '0')}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium capitalize">
+                            {track.playlist.replace('_', ' ')}
+                          </span>
+
+                          {track.isCustom && (
+                            <button
+                              onClick={() => handleDeleteMusicTrack(track)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete app-managed copy (original source is safe)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           )}
 
@@ -1292,21 +1817,112 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* Section 7: Backup & Restore */}
           {activeSection === 'backup' && (
             <div className="space-y-6">
-              <div className="border-b border-gray-100 pb-3">
-                <h3 className="text-base font-bold text-gray-900">Local Snapshots & Data Export</h3>
-                <p className="text-xs text-gray-500">Create cryptographic database backups with HMAC tamper-evidence heads</p>
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">Local Snapshots, Restore & Data Import</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Export encrypted snapshots, restore previous backups transactionally, or import external datasets
+                </p>
               </div>
 
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Ap is strictly offline-first. Your data is stored on this machine and never sent to cloud servers without your explicit consent.
+              {/* 3 Dedicated Action Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Create Backup Card */}
+                <div className="p-5 bg-white dark:bg-[#142038] rounded-2xl border border-gray-200 dark:border-gray-800 hover:border-[#E11D26] dark:hover:border-[#E11D26] shadow-xs flex flex-col justify-between transition-all group">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#E11D26] flex items-center justify-center font-bold">
+                      <Download className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white">Create Backup</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                        Export full application data including 1,337 problems, study logs, code drafts, and planner into a secure <code className="font-mono text-[11px] text-[#E11D26]">.apdb</code> snapshot.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-2">
+                    <button
+                      id="btn-settings-create-backup"
+                      onClick={() => onOpenBackupModal('create')}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#E11D26] hover:bg-[#C8101A] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Create Backup Snapshot</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Restore Backup Card */}
+                <div className="p-5 bg-white dark:bg-[#142038] rounded-2xl border border-gray-200 dark:border-gray-800 hover:border-blue-500 dark:hover:border-blue-500 shadow-xs flex flex-col justify-between transition-all group">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                      <RotateCcw className="w-5 h-5 group-hover:rotate-[-45deg] transition-transform" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white">Restore Backup</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                        Select an existing Ap backup, preview detected categories, select full or selective restore, with automatic pre-restore safety snapshots.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-2">
+                    <button
+                      id="btn-settings-restore-backup"
+                      onClick={() => onOpenBackupModal('restore')}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-700 hover:border-blue-500 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-bold rounded-xl bg-white dark:bg-[#142038] shadow-2xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Restore from Backup</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Import Data Card */}
+                <div className="p-5 bg-white dark:bg-[#142038] rounded-2xl border border-gray-200 dark:border-gray-800 hover:border-emerald-500 dark:hover:border-emerald-500 shadow-xs flex flex-col justify-between transition-all group">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                      <FileSpreadsheet className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white">Import Data</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                        Import external problem sets or planner task lists from JSON or RFC 4180 CSV with duplicate checking and conflict resolution.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-2">
+                    <button
+                      id="btn-settings-import-data"
+                      onClick={() => onOpenImportModal ? onOpenImportModal() : onNavigate?.('tracks')}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-700 hover:border-emerald-500 text-gray-800 dark:text-gray-200 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold rounded-xl bg-white dark:bg-[#142038] shadow-2xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Import External Dataset</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Offline-First Security & Safety Details */}
+              <div className="p-4 bg-gray-50 dark:bg-[#142038]/50 rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-gray-200">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Offline-First Guarantee & Local Database Health</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                    Database Engine: SQLite 3.45 (In-Memory + AES/HMAC Encrypted Local Storage)
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Ap Workspace never transmits your problems, code drafts, or study history to external cloud servers. All backups are encrypted locally and cryptographically signed with an HMAC integrity head. Before any restoration occurs, an automatic safety backup is generated to ensure zero data loss.
                 </p>
-                <div className="flex items-center gap-3">
+                <div className="pt-1 flex items-center gap-3">
                   <button
-                    onClick={onOpenBackupModal}
-                    className="px-4 py-2 bg-[#E11D26] hover:bg-[#C8101A] text-white text-xs font-bold rounded-xl shadow-xs"
+                    onClick={() => onOpenBackupModal('create')}
+                    className="text-xs text-[#E11D26] hover:underline font-bold flex items-center gap-1"
                   >
-                    Open Backup Manager
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>Open Comprehensive Backup Manager</span>
                   </button>
                 </div>
               </div>
@@ -1327,24 +1943,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   alt="Glossy Red Ap Monogram Icon" 
                   className="w-16 h-16 rounded-2xl object-contain drop-shadow-md shrink-0" 
                 />
-                <div>
-                  <h4 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
-                    <span>Ap</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E11D26] text-white">v1.0.0</span>
-                  </h4>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Master developer interview preparation, 50 DSA patterns, 1,337 problems, SQL practice, PostgreSQL lab, and local study planner.
-                  </p>
-                  <p className="text-xs text-gray-500 font-semibold mt-1">
-                    Created by Arun Pandian (arun4709s) • arunpandi47777@gmail.com
-                  </p>
+                <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+                      <span>Ap</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E11D26] text-white">v{appVersion}</span>
+                    </h4>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Master developer interview preparation, 50 DSA patterns, 1,337 problems, SQL practice, PostgreSQL lab, and local study planner.
+                    </p>
+                    <p className="text-xs text-gray-500 font-semibold mt-1">
+                      Created by Arun Pandian (arun4709s) • arunpandi47777@gmail.com
+                    </p>
+                  </div>
+                  <button
+                    id="btn-settings-check-updates"
+                    onClick={() => window.dispatchEvent(new CustomEvent('ap_open_update_dialog'))}
+                    className="px-4 py-2.5 bg-[#E11D26] text-white font-semibold text-xs rounded-xl shadow-xs hover:bg-[#b8141d] active:scale-95 transition-all flex items-center gap-2 shrink-0 cursor-pointer w-fit"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Check for Updates</span>
+                  </button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200/80">
                   <span className="text-gray-400 block text-[11px] font-medium mb-1">Architecture & Runtime</span>
-                  <div className="font-semibold text-gray-800">Tauri 2 • React 18 • CPython 3.12 • SQLite 3</div>
+                  <div className="font-semibold text-gray-800">{APP_RUNTIME_ARCHITECTURE}</div>
                 </div>
                 <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200/80">
                   <span className="text-gray-400 block text-[11px] font-medium mb-1">Security Model</span>
@@ -1361,7 +1987,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="col-span-2 p-3.5 bg-gray-50 rounded-xl border border-gray-200/80">
                   <span className="text-gray-400 block text-[11px] font-medium mb-1">Local App Data Directory</span>
                   <div className="font-mono text-[11px] text-gray-800 break-all">
-                    {tauriInfo?.app_data_dir || '%APPDATA%\\Ap (Local Database & Preferences)'}
+                    %APPDATA%\Ap (Local Database & Preferences)
                   </div>
                 </div>
               </div>

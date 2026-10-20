@@ -70,7 +70,7 @@ function createMultiSizeIco(sizeList) {
 }
 
 const icoBuffer = createMultiSizeIco(sizes);
-fs.writeFileSync('src-tauri/icons/icon.ico', icoBuffer);
+fs.writeFileSync('build/icon.ico', icoBuffer);
 fs.writeFileSync('public/favicon.ico', icoBuffer);
 
 console.log(`Generated true multi-size ICO (${icoBuffer.length} bytes) containing 7 sizes: [16, 24, 32, 48, 64, 128, 256]`);

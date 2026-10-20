@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import { Task, ScreenId } from '@/types';
 import { fetchProfileStats, fetchStats, fetchSubmissions } from '@/services/db';
+import { DailyStreakCard } from '@/components/dashboard/DailyStreakCard';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -165,6 +166,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Prominent Daily Problem-Solving Streak System */}
+      <DailyStreakCard onNavigate={onNavigate} />
 
       {/* KPI Tiles Row */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

@@ -3,7 +3,8 @@ import type { Database } from 'sql.js';
 import seedData from '@/data/seedData.json';
 import sqlExercisesData from '@/data/sqlExercises.json';
 import postgresExercisesData from '@/data/postgresExercises.json';
-import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus, SqlExercise, PostgresExercise, SubmissionRecord, HeatmapResult, ProfileStatsResult, HeatmapDay } from '@/types';
+import { Track, Question, Task, StudySession, DailyReview, Attempt, LicenseState, IntegrityStatus, SqlExercise, PostgresExercise, SubmissionRecord, HeatmapResult, ProfileStatsResult, HeatmapDay, DifficultyLevel } from '@/types';
+import { parseCsvText, exportToCsv, getNormalizedFieldValue, CsvImportSummary } from './csvHelper';
 
 const DB_STORAGE_KEY = 'ap_encrypted_sqlite_db_v1';
 const DB_HMAC_KEY = 'ap_tamper_evidence_root_key_2026';
@@ -349,6 +350,33 @@ function initializeSchema(db: Database): void {
   for (const sql of attemptCols) {
     try { db.run(sql); } catch {}
   }
+
+  // Safe migrations for tracks table
+  const trackCols = [
+    'ALTER TABLE tracks ADD COLUMN category TEXT;',
+    'ALTER TABLE tracks ADD COLUMN tags TEXT;'
+  ];
+  for (const sql of trackCols) {
+    try { db.run(sql); } catch {}
+  }
+
+  // Safe migrations for questions table (Problem Verification Pipeline)
+  const questionCols = [
+    "ALTER TABLE questions ADD COLUMN verification_status TEXT DEFAULT 'unverified';",
+    "ALTER TABLE questions ADD COLUMN source_url TEXT;",
+    "ALTER TABLE questions ADD COLUMN source_attribution TEXT;",
+    "ALTER TABLE questions ADD COLUMN source_license TEXT;",
+    "ALTER TABLE questions ADD COLUMN original_statement TEXT;",
+    "ALTER TABLE questions ADD COLUMN ap_authored_statement TEXT;",
+    "ALTER TABLE questions ADD COLUMN public_examples_json TEXT;",
+    "ALTER TABLE questions ADD COLUMN private_tests_json TEXT;",
+    "ALTER TABLE questions ADD COLUMN reference_implementation TEXT;",
+    "ALTER TABLE questions ADD COLUMN verification_diagnostics TEXT;",
+    "ALTER TABLE questions ADD COLUMN verified_at TEXT;"
+  ];
+  for (const sql of questionCols) {
+    try { db.run(sql); } catch {}
+  }
 }
 
 async function seedAdditionalTables(db: Database): Promise<void> {
@@ -512,17 +540,488 @@ async function seedInitialData(db: Database): Promise<void> {
   }
 }
 
-// Database Query APIs
+// Database Query APIs — Tracks & Coding Sheets CRUD
 export async function fetchTracks(): Promise<Track[]> {
   const db = await getDatabase();
-  const res = db.exec(`SELECT * FROM tracks ORDER BY track_order ASC`);
+  const res = db.exec(`
+    SELECT 
+      t.id, t.slug, t.title, t.description, t.track_order, t.level, t.created_at, t.category, t.tags,
+      COUNT(q.id) as total_problems,
+      SUM(CASE WHEN q.status = 'solved' THEN 1 ELSE 0 END) as solved_problems
+    FROM tracks t
+    LEFT JOIN questions q ON q.track_slug = t.slug
+    GROUP BY t.id
+    ORDER BY t.track_order ASC
+  `);
   if (!res.length) return [];
   const cols = res[0].columns;
   return res[0].values.map(row => {
     const obj: any = {};
     cols.forEach((col, i) => { obj[col] = row[i]; });
+    obj.total_problems = Number(obj.total_problems) || 0;
+    obj.solved_problems = Number(obj.solved_problems) || 0;
+    if (obj.tags && typeof obj.tags === 'string') {
+      try { obj.tags = JSON.parse(obj.tags); } catch { obj.tags = [obj.tags]; }
+    } else if (!obj.tags) {
+      obj.tags = [];
+    }
     return obj as Track;
   });
+}
+
+export async function getTrackBySlug(slug: string): Promise<Track | null> {
+  const db = await getDatabase();
+  const res = db.exec(`
+    SELECT 
+      t.id, t.slug, t.title, t.description, t.track_order, t.level, t.created_at, t.category, t.tags,
+      COUNT(q.id) as total_problems,
+      SUM(CASE WHEN q.status = 'solved' THEN 1 ELSE 0 END) as solved_problems
+    FROM tracks t
+    LEFT JOIN questions q ON q.track_slug = t.slug
+    WHERE t.slug = ?
+    GROUP BY t.id
+  `, [slug]);
+  if (!res.length || !res[0].values.length) return null;
+  const cols = res[0].columns;
+  const obj: any = {};
+  cols.forEach((col, i) => { obj[col] = res[0].values[0][i]; });
+  obj.total_problems = Number(obj.total_problems) || 0;
+  obj.solved_problems = Number(obj.solved_problems) || 0;
+  if (obj.tags && typeof obj.tags === 'string') {
+    try { obj.tags = JSON.parse(obj.tags); } catch { obj.tags = [obj.tags]; }
+  } else if (!obj.tags) {
+    obj.tags = [];
+  }
+  return obj as Track;
+}
+
+export async function createTrack(trackData: {
+  title: string;
+  description?: string;
+  level?: 'beginner' | 'intermediate' | 'advanced';
+  category?: string;
+  tags?: string[];
+  slug?: string;
+}): Promise<Track> {
+  const db = await getDatabase();
+  const title = (trackData.title || '').trim();
+  if (!title) {
+    throw new Error('Track title is required');
+  }
+
+  // Generate unique slug
+  let baseSlug = trackData.slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'custom-sheet';
+  let slug = baseSlug;
+  let counter = 1;
+  while (true) {
+    const existing = db.exec(`SELECT COUNT(*) FROM tracks WHERE slug = ?`, [slug]);
+    const count = existing.length > 0 ? (existing[0].values[0][0] as number) : 0;
+    if (count === 0) break;
+    slug = `${baseSlug}-${counter++}`;
+  }
+
+  const id = `track-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const orderRes = db.exec(`SELECT COALESCE(MAX(track_order), 0) + 1 FROM tracks`);
+  const trackOrder = orderRes.length > 0 ? (orderRes[0].values[0][0] as number) : 1;
+  const level = trackData.level || 'intermediate';
+  const description = trackData.description?.trim() || `Coding sheet for ${title}`;
+  const category = trackData.category?.trim() || 'Custom';
+  const tagsJson = JSON.stringify(trackData.tags || []);
+  const createdAt = new Date().toISOString();
+
+  db.run(
+    `INSERT INTO tracks (id, slug, title, description, track_order, level, created_at, category, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, slug, title, description, trackOrder, level, createdAt, category, tagsJson]
+  );
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+  }
+
+  return {
+    id,
+    slug,
+    title,
+    description,
+    track_order: trackOrder,
+    level,
+    category,
+    tags: trackData.tags || [],
+    total_problems: 0,
+    solved_problems: 0,
+  };
+}
+
+export async function updateTrack(id: string, updates: Partial<Track>): Promise<Track> {
+  const db = await getDatabase();
+  const currentRes = db.exec(`SELECT * FROM tracks WHERE id = ?`, [id]);
+  if (!currentRes.length || !currentRes[0].values.length) {
+    throw new Error(`Track with id ${id} not found`);
+  }
+  const cols = currentRes[0].columns;
+  const current: any = {};
+  cols.forEach((col, i) => { current[col] = currentRes[0].values[0][i]; });
+
+  const title = updates.title !== undefined ? updates.title.trim() : current.title;
+  if (!title) throw new Error('Track title cannot be empty');
+
+  const description = updates.description !== undefined ? updates.description : current.description;
+  const level = updates.level !== undefined ? updates.level : current.level;
+  const category = updates.category !== undefined ? updates.category : current.category;
+  const trackOrder = updates.track_order !== undefined ? updates.track_order : current.track_order;
+  const tagsJson = updates.tags !== undefined ? JSON.stringify(updates.tags) : current.tags;
+
+  let newSlug = current.slug;
+  if (updates.slug && updates.slug.trim() !== current.slug) {
+    const desired = updates.slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const check = db.exec(`SELECT COUNT(*) FROM tracks WHERE slug = ? AND id != ?`, [desired, id]);
+    if (check.length > 0 && (check[0].values[0][0] as number) > 0) {
+      throw new Error(`Slug "${desired}" is already taken by another track`);
+    }
+    newSlug = desired;
+    db.run(`UPDATE questions SET track_slug = ? WHERE track_slug = ?`, [newSlug, current.slug]);
+  }
+
+  db.run(
+    `UPDATE tracks SET title = ?, description = ?, level = ?, category = ?, track_order = ?, tags = ?, slug = ? WHERE id = ?`,
+    [title, description, level, category, trackOrder, tagsJson, newSlug, id]
+  );
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+  }
+
+  return (await getTrackBySlug(newSlug))!;
+}
+
+export async function deleteTrack(id: string, deleteQuestions: boolean = true): Promise<void> {
+  const db = await getDatabase();
+  const currentRes = db.exec(`SELECT slug FROM tracks WHERE id = ?`, [id]);
+  if (!currentRes.length || !currentRes[0].values.length) {
+    return;
+  }
+  const slug = String(currentRes[0].values[0][0]);
+
+  if (deleteQuestions) {
+    db.run(`DELETE FROM questions WHERE track_slug = ?`, [slug]);
+  } else {
+    db.run(`UPDATE questions SET track_slug = 'general' WHERE track_slug = ?`, [slug]);
+  }
+
+  db.run(`DELETE FROM subtopics WHERE topic_id IN (SELECT id FROM topics WHERE track_id = ?)`, [id]);
+  db.run(`DELETE FROM topics WHERE track_id = ?`, [id]);
+  db.run(`DELETE FROM tracks WHERE id = ?`, [id]);
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+  }
+}
+
+export async function createQuestion(q: Partial<Question> & { title: string }): Promise<Question> {
+  const db = await getDatabase();
+  const title = (q.title || '').trim();
+  if (!title) throw new Error('Question title is required');
+
+  const trackSlug = q.track_slug || 'core-dsa';
+  let orderNum = q.order_num;
+  if (!orderNum) {
+    const maxRes = db.exec(`SELECT COALESCE(MAX(order_num), 0) + 1 FROM questions WHERE track_slug = ?`, [trackSlug]);
+    orderNum = maxRes.length > 0 ? (maxRes[0].values[0][0] as number) : 1;
+  }
+
+  const id = q.id || `prob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const difficulty = q.difficulty || 'Medium';
+  const platform = q.platform || 'LeetCode';
+  const patternName = q.pattern_name || 'General';
+  const subtopicName = q.subtopic_name || '';
+  const practiceLink = q.practice_link || '';
+  const videoLink = q.video_link || '';
+  const hintLink = q.hint_link || '';
+  const xp = q.xp || (difficulty === 'Easy' ? 5 : difficulty === 'Medium' ? 10 : 15);
+  const status = q.status || 'todo';
+  const createdAt = new Date().toISOString();
+
+  // Evaluate deterministic verification pipeline for new question
+  const { verifyProblem } = await import('@/services/verification/problemVerificationService');
+  const tempQ: Question = {
+    id,
+    track_slug: trackSlug,
+    title,
+    platform,
+    difficulty,
+    pattern_name: patternName,
+    subtopic_name: subtopicName,
+    practice_link: practiceLink,
+    video_link: videoLink,
+    hint_link: hintLink,
+    xp,
+    content_type: 'problem',
+    status: status as any,
+    order_num: orderNum,
+    last_attempted: undefined,
+    is_bookmarked: false,
+    created_at: createdAt,
+  };
+  const rep = verifyProblem(tempQ);
+  const verificationStatus = q.verification_status || rep.status;
+  const sourceAttribution = q.source_attribution || rep.sourceAttribution;
+  const diagnostics = JSON.stringify(rep.diagnostics);
+
+  db.run(
+    `INSERT INTO questions (id, track_slug, title, platform, difficulty, pattern_name, subtopic_name, practice_link, video_link, hint_link, xp, status, order_num, created_at, verification_status, source_url, source_attribution, verification_diagnostics, verified_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, trackSlug, title, platform, difficulty, patternName, subtopicName, practiceLink, videoLink, hintLink, xp, status, orderNum, createdAt, verificationStatus, practiceLink, sourceAttribution, diagnostics, rep.verifiedAt]
+  );
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+  }
+
+  return {
+    ...tempQ,
+    verification_status: verificationStatus,
+    source_url: practiceLink,
+    source_attribution: sourceAttribution,
+    verification_diagnostics: diagnostics,
+    verified_at: rep.verifiedAt,
+  };
+}
+
+export async function updateQuestion(id: string, updates: Partial<Question>): Promise<Question> {
+  const db = await getDatabase();
+  const curRes = db.exec(`SELECT * FROM questions WHERE id = ?`, [id]);
+  if (!curRes.length || !curRes[0].values.length) {
+    throw new Error(`Question ${id} not found`);
+  }
+  const cols = curRes[0].columns;
+  const current: any = {};
+  cols.forEach((col, i) => { current[col] = curRes[0].values[0][i]; });
+
+  const title = updates.title !== undefined ? updates.title.trim() : current.title;
+  if (!title) throw new Error('Question title cannot be empty');
+
+  const difficulty = updates.difficulty !== undefined ? updates.difficulty : current.difficulty;
+  const platform = updates.platform !== undefined ? updates.platform : current.platform;
+  const patternName = updates.pattern_name !== undefined ? updates.pattern_name : current.pattern_name;
+  const subtopicName = updates.subtopic_name !== undefined ? updates.subtopic_name : current.subtopic_name;
+  const practiceLink = updates.practice_link !== undefined ? updates.practice_link : current.practice_link;
+  const videoLink = updates.video_link !== undefined ? updates.video_link : current.video_link;
+  const hintLink = updates.hint_link !== undefined ? updates.hint_link : current.hint_link;
+  const xp = updates.xp !== undefined ? updates.xp : current.xp;
+  const status = updates.status !== undefined ? updates.status : current.status;
+  const orderNum = updates.order_num !== undefined ? updates.order_num : current.order_num;
+  const trackSlug = updates.track_slug !== undefined ? updates.track_slug : current.track_slug;
+
+  db.run(
+    `UPDATE questions SET 
+      title = ?, difficulty = ?, platform = ?, pattern_name = ?, subtopic_name = ?,
+      practice_link = ?, video_link = ?, hint_link = ?, xp = ?, status = ?,
+      order_num = ?, track_slug = ?
+     WHERE id = ?`,
+    [title, difficulty, platform, patternName, subtopicName, practiceLink, videoLink, hintLink, xp, status, orderNum, trackSlug, id]
+  );
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+  }
+
+  return {
+    ...current,
+    title,
+    difficulty,
+    platform,
+    pattern_name: patternName,
+    subtopic_name: subtopicName,
+    practice_link: practiceLink,
+    video_link: videoLink,
+    hint_link: hintLink,
+    xp,
+    status,
+    order_num: orderNum,
+    track_slug: trackSlug,
+  };
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  const db = await getDatabase();
+  db.run(`DELETE FROM questions WHERE id = ?`, [id]);
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+  }
+}
+
+export async function reorderTrackQuestions(trackSlug: string, orderedQuestionIds: string[]): Promise<void> {
+  const db = await getDatabase();
+  orderedQuestionIds.forEach((id, index) => {
+    db.run(`UPDATE questions SET order_num = ? WHERE id = ? AND track_slug = ?`, [index + 1, id, trackSlug]);
+  });
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+  }
+}
+
+export async function importCodingSheetFromCsv(options: {
+  csvText: string;
+  targetTrackSlug?: string;
+  newTrackTitle?: string;
+  category?: string;
+}): Promise<CsvImportSummary> {
+  const parsed = parseCsvText(options.csvText);
+  if (!parsed.records.length) {
+    return {
+      totalRows: 0,
+      imported: 0,
+      skipped: 0,
+      duplicates: 0,
+      duplicate: 0,
+      errors: [{ row: 1, error: 'CSV file contains no valid data rows', line: 1, message: 'CSV file contains no valid data rows' }],
+    };
+  }
+
+  let targetTrackSlug = options.targetTrackSlug;
+
+  if (options.newTrackTitle && options.newTrackTitle.trim()) {
+    const created = await createTrack({
+      title: options.newTrackTitle.trim(),
+      category: options.category || 'Imported Sheets',
+      description: `Imported coding sheet (${parsed.records.length} questions)`,
+    });
+    targetTrackSlug = created.slug;
+  } else if (!targetTrackSlug) {
+    const firstSlug = getNormalizedFieldValue(parsed.records[0], 'track_slug');
+    if (firstSlug) {
+      targetTrackSlug = firstSlug;
+      const existing = await getTrackBySlug(targetTrackSlug);
+      if (!existing) {
+        await createTrack({
+          title: targetTrackSlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          slug: targetTrackSlug,
+        });
+      }
+    } else {
+      const created = await createTrack({
+        title: `Imported Sheet ${new Date().toLocaleDateString()}`,
+        category: options.category || 'Imported Sheets',
+      });
+      targetTrackSlug = created.slug;
+    }
+  }
+
+  const finalSlug: string = targetTrackSlug || 'custom-sheet';
+  const db = await getDatabase();
+  const existingRows = db.exec(`SELECT LOWER(TRIM(title)) FROM questions WHERE track_slug = ?`, [finalSlug]);
+  const existingTitles = new Set<string>();
+  if (existingRows.length && existingRows[0].values) {
+    existingRows[0].values.forEach(v => {
+      if (v[0]) existingTitles.add(String(v[0]).toLowerCase().trim());
+    });
+  }
+
+  const fileSeenTitles = new Set<string>();
+  let imported = 0;
+  let skipped = 0;
+  let duplicate = 0;
+  const errors: Array<{ row: number; error: string; line?: number; message?: string }> = [];
+
+  const maxRes = db.exec(`SELECT COALESCE(MAX(order_num), 0) FROM questions WHERE track_slug = ?`, [finalSlug]);
+  let currentOrder = maxRes.length > 0 ? (maxRes[0].values[0][0] as number) : 0;
+
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const rowItem = parsed.rows[i];
+    const rec = rowItem.record;
+    const lineNum = rowItem.lineNum;
+    const title = getNormalizedFieldValue(rec, 'title');
+
+    if (!title) {
+      errors.push({ row: lineNum, error: 'Missing required field: problem title', line: lineNum, message: 'Missing required field: problem title' });
+      skipped++;
+      continue;
+    }
+
+    const normTitle = title.toLowerCase().trim();
+    if (existingTitles.has(normTitle) || fileSeenTitles.has(normTitle)) {
+      duplicate++;
+      skipped++;
+      continue;
+    }
+    fileSeenTitles.add(normTitle);
+    existingTitles.add(normTitle);
+
+    currentOrder++;
+    const orderNum = parseInt(getNormalizedFieldValue(rec, 'order_num') || '', 10) || currentOrder;
+    const difficultyRaw = getNormalizedFieldValue(rec, 'difficulty') || 'Medium';
+    const difficulty = (['Easy', 'Medium', 'Hard'].includes(difficultyRaw) ? difficultyRaw : 'Medium') as DifficultyLevel;
+    const platform = getNormalizedFieldValue(rec, 'platform') || 'LeetCode';
+    const patternName = getNormalizedFieldValue(rec, 'pattern_name') || 'General';
+    const subtopicName = getNormalizedFieldValue(rec, 'subtopic_name') || '';
+    const practiceLink = getNormalizedFieldValue(rec, 'practice_link') || '';
+    const videoLink = getNormalizedFieldValue(rec, 'video_link') || '';
+    const hintLink = getNormalizedFieldValue(rec, 'hint_link') || '';
+    const xp = parseInt(getNormalizedFieldValue(rec, 'xp') || '', 10) || (difficulty === 'Easy' ? 5 : difficulty === 'Medium' ? 10 : 15);
+    const status = (getNormalizedFieldValue(rec, 'status') || 'todo').toLowerCase();
+
+    const id = `prob-${finalSlug}-${orderNum}-${Math.random().toString(36).substring(2, 6)}`;
+
+    db.run(
+      `INSERT INTO questions 
+       (id, track_slug, title, platform, difficulty, pattern_name, subtopic_name, practice_link, video_link, hint_link, xp, status, order_num)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, finalSlug, title, platform, difficulty, patternName, subtopicName, practiceLink, videoLink, hintLink, xp, status, orderNum]
+    );
+    imported++;
+  }
+
+  persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+  }
+
+  return {
+    totalRows: parsed.rows.length,
+    imported,
+    skipped,
+    duplicates: duplicate,
+    duplicate,
+    errors,
+  };
+}
+
+export async function exportCodingSheetToCsv(trackSlug: string): Promise<string> {
+  const db = await getDatabase();
+  const res = db.exec(
+    `SELECT order_num, title, difficulty, pattern_name, subtopic_name, platform, practice_link, video_link, hint_link, xp, status, track_slug
+     FROM questions 
+     WHERE track_slug = ? 
+     ORDER BY order_num ASC`,
+    [trackSlug]
+  );
+  if (!res.length || !res[0].values.length) {
+    return 'order_num,title,difficulty,pattern_name,subtopic_name,platform,practice_link,video_link,hint_link,xp,status,track_slug\n';
+  }
+  const headers = res[0].columns;
+  return exportToCsv(headers, res[0].values as (string | number | null | undefined)[][]);
 }
 
 export async function fetchQuestions(options?: {
@@ -532,6 +1031,7 @@ export async function fetchQuestions(options?: {
   difficulty?: string;
   status?: string;
   trackSlug?: string;
+  verificationStatus?: string;
 }): Promise<{ questions: Question[]; total: number }> {
   const db = await getDatabase();
   let where = 'WHERE 1=1';
@@ -548,6 +1048,10 @@ export async function fetchQuestions(options?: {
   if (options?.trackSlug) {
     where += ' AND track_slug = ?';
     params.push(options.trackSlug);
+  }
+  if (options?.verificationStatus && options.verificationStatus !== 'All') {
+    where += ' AND verification_status = ?';
+    params.push(options.verificationStatus);
   }
   if (options?.search) {
     where += ' AND (title LIKE ? OR pattern_name LIKE ? OR subtopic_name LIKE ?)';
@@ -582,6 +1086,97 @@ export async function updateQuestionStatus(id: string, status: string): Promise<
   persistDatabase();
 }
 
+/**
+ * Creates an immutable safety backup of SQLite database before running audit or migrations.
+ */
+export async function createPreVerificationSafetyBackup(): Promise<{ success: boolean; key: string; timestamp: string }> {
+  const db = await getDatabase();
+  const timestamp = new Date().toISOString();
+  const backupKey = `ap_db_safety_backup_pre_verification_${Date.now()}`;
+  try {
+    const data = db.export();
+    let binary = '';
+    const bytes = new Uint8Array(data);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    if (typeof localStorage !== 'undefined') {
+      const b64 = btoa(binary);
+      localStorage.setItem(backupKey, b64);
+      localStorage.setItem('ap_db_safety_backup_latest', b64);
+    }
+    return { success: true, key: backupKey, timestamp };
+  } catch (err: any) {
+    console.error('Failed to create pre-verification safety backup:', err);
+    return { success: false, key: backupKey, timestamp };
+  }
+}
+
+/**
+ * Executes library audit across all database problems and updates verification metadata.
+ * User attempts, submissions, and progress are strictly preserved.
+ */
+export async function auditAndPersistProblemVerifications(): Promise<any> {
+  await createPreVerificationSafetyBackup();
+  const db = await getDatabase();
+  const { auditProblemLibrary } = await import('@/services/verification/problemVerificationService');
+
+  // Load all questions from database
+  const qRes = await fetchQuestions({ limit: 10000 });
+  const allQ = qRes.questions;
+  const auditSummary = auditProblemLibrary(allQ);
+
+  // Safely update verification fields in SQLite
+  db.run('BEGIN TRANSACTION;');
+  try {
+    for (const q of allQ) {
+      const rep = auditSummary.problemReports[q.id];
+      if (rep) {
+        db.run(
+          `UPDATE questions SET 
+             verification_status = ?,
+             source_url = ?,
+             source_attribution = ?,
+             verification_diagnostics = ?,
+             verified_at = ?
+           WHERE id = ?`,
+          [
+            rep.status,
+            rep.sourceUrl || '',
+            rep.sourceAttribution || '',
+            JSON.stringify(rep.diagnostics),
+            rep.verifiedAt,
+            q.id
+          ]
+        );
+      }
+    }
+    db.run('COMMIT;');
+    persistDatabase();
+  } catch (e) {
+    db.run('ROLLBACK;');
+    throw e;
+  }
+
+  // Trigger UI update events
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_audit_updated', { detail: auditSummary }));
+  }
+
+  return auditSummary;
+}
+
+/**
+ * Fetches current verification library summary.
+ */
+export async function fetchVerificationSummary(): Promise<any> {
+  const { auditProblemLibrary } = await import('@/services/verification/problemVerificationService');
+  const qRes = await fetchQuestions({ limit: 10000 });
+  return auditProblemLibrary(qRes.questions);
+}
+
 export async function fetchTasks(): Promise<Task[]> {
   const db = await getDatabase();
   const res = db.exec(`SELECT * FROM tasks ORDER BY created_at DESC`);
@@ -610,6 +1205,24 @@ export async function updateTaskStatus(id: string, status: string): Promise<void
   const completedAt = status === 'completed' ? new Date().toISOString() : null;
   db.run(`UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?`, [status, completedAt, id]);
   persistDatabase();
+
+  // Publish real-time events through Electron IPC & WebSocket
+  try {
+    const { realtimeService } = await import('@/services/websocket/realtimeService');
+    if (status === 'completed') {
+      const taskRes = db.exec(`SELECT title FROM tasks WHERE id = ?`, [id]);
+      const title = taskRes.length && taskRes[0].values.length ? String(taskRes[0].values[0][0]) : id;
+      realtimeService.publish('task:completed', {
+        taskId: id,
+        title,
+        completedAt: completedAt || new Date().toISOString(),
+      });
+    }
+    realtimeService.publish('analytics:invalidated', {
+      reason: 'task',
+      timestamp: new Date().toISOString(),
+    });
+  } catch {}
 }
 
 export async function deleteTask(id: string): Promise<void> {
@@ -646,6 +1259,24 @@ export async function logStudySession(session: Omit<StudySession, 'id' | 'row_hm
     [id, session.session_type, session.started_at, session.ended_at || '', session.elapsed_seconds, session.active_seconds, session.idle_seconds, session.status, row_hmac]
   );
   persistDatabase();
+
+  // Publish real-time events through Electron IPC & WebSocket
+  try {
+    const { realtimeService } = await import('@/services/websocket/realtimeService');
+    realtimeService.publish('study-session:completed', {
+      sessionId: id,
+      sessionType: session.session_type,
+      startedAt: session.started_at,
+      endedAt: session.ended_at || new Date().toISOString(),
+      elapsedSeconds: session.elapsed_seconds,
+      activeSeconds: session.active_seconds,
+      idleSeconds: session.idle_seconds,
+    });
+    realtimeService.publish('analytics:invalidated', {
+      reason: 'session',
+      timestamp: new Date().toISOString(),
+    });
+  } catch {}
 }
 
 export async function fetchStats() {
@@ -723,39 +1354,45 @@ function parseCSVLine(text: string): string[] {
 }
 
 export async function importQuestionsFromCsv(csvText: string): Promise<{ imported: number; total: number }> {
-  const db = await getDatabase();
-  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
-  if (lines.length <= 1) return { imported: 0, total: 0 };
+  const parsed = parseCsvText(csvText);
+  if (!parsed.records.length) return { imported: 0, total: 0 };
 
-  const headerLine = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const db = await getDatabase();
   let importedCount = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    const row = parseCSVLine(lines[i]);
-    if (row.length < 3) continue;
+  for (let i = 0; i < parsed.records.length; i++) {
+    const rec = parsed.records[i];
+    const rawOrder = getNormalizedFieldValue(rec, 'order_num');
+    const orderNum = parseInt(rawOrder || '', 10) || (i + 1);
 
-    const orderNum = parseInt(row[0], 10) || i;
-    const title = row[9] || row[1] || `Problem ${orderNum}`;
-    const patternName = row[5] || 'General DSA';
-    const subtopicName = row[7] || '';
-    const platform = row[10] || 'LeetCode';
-    const difficulty = row[11] || 'Medium';
-    const practiceLink = row[12] || '';
-    const videoLink = row[13] || '';
-    const hintLink = row[14] || '';
+    const title = getNormalizedFieldValue(rec, 'title') || `Problem ${orderNum}`;
+    const patternName = getNormalizedFieldValue(rec, 'pattern_name') || 'General DSA';
+    const subtopicName = getNormalizedFieldValue(rec, 'subtopic_name') || '';
+    const platform = getNormalizedFieldValue(rec, 'platform') || 'LeetCode';
+    const difficultyRaw = getNormalizedFieldValue(rec, 'difficulty') || 'Medium';
+    const difficulty = ['Easy', 'Medium', 'Hard'].includes(difficultyRaw) ? difficultyRaw : 'Medium';
+    const practiceLink = getNormalizedFieldValue(rec, 'practice_link') || '';
+    const videoLink = getNormalizedFieldValue(rec, 'video_link') || '';
+    const hintLink = getNormalizedFieldValue(rec, 'hint_link') || '';
+    const trackSlug = getNormalizedFieldValue(rec, 'track_slug') || 'core-dsa';
 
     const id = `prob-${orderNum}`;
 
     db.run(
       `INSERT OR REPLACE INTO questions 
-       (id, title, pattern_name, subtopic_name, platform, difficulty, practice_link, video_link, hint_link, order_num, xp, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5, 'todo')`,
-      [id, title, patternName, subtopicName, platform, difficulty, practiceLink, videoLink, hintLink, orderNum]
+       (id, title, pattern_name, subtopic_name, platform, difficulty, practice_link, video_link, hint_link, order_num, xp, status, track_slug)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5, 'todo', ?)`,
+      [id, title, patternName, subtopicName, platform, difficulty, practiceLink, videoLink, hintLink, orderNum, trackSlug]
     );
     importedCount++;
   }
 
   persistDatabase();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_questions_updated'));
+    window.dispatchEvent(new CustomEvent('ap_tracks_updated'));
+  }
 
   const countRes = db.exec(`SELECT COUNT(*) FROM questions`);
   const total = countRes.length > 0 ? (countRes[0].values[0][0] as number) : importedCount;
@@ -1932,10 +2569,57 @@ export async function recordSubmission(sub: {
     created_at: timestamp,
   };
 
+  // Publish real-time events through Electron IPC & WebSocket
+  try {
+    const { realtimeService } = await import('@/services/websocket/realtimeService');
+    const { getStreakState } = await import('@/services/streak/streakService');
+
+    if (sub.status === 'Accepted') {
+      realtimeService.publish('submission:accepted', {
+        submissionId: subId,
+        questionId: sub.question_id,
+        problemTitle,
+        difficulty,
+        category,
+        problemType,
+        language: sub.language,
+        runtimeMs: sub.runtime_ms,
+        memoryKb: sub.memory_kb,
+        testCasesPassed: sub.test_cases_passed,
+        totalTestCases: sub.total_test_cases,
+        timestamp,
+      });
+
+      const streakInfo = await getStreakState();
+      realtimeService.publish('streak:updated', {
+        currentStreak: streakInfo.currentStreak,
+        longestStreak: streakInfo.longestStreak,
+        totalActiveDays: streakInfo.totalActiveDays,
+        solvedToday: streakInfo.solvedToday,
+        timestamp,
+      });
+    } else {
+      realtimeService.publish('submission:updated', {
+        submissionId: subId,
+        questionId: sub.question_id,
+        problemTitle,
+        status: sub.status,
+        language: sub.language,
+        timestamp,
+      });
+    }
+
+    realtimeService.publish('analytics:invalidated', {
+      reason: 'submission',
+      timestamp,
+    });
+  } catch {}
+
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('ap_submissions_updated', { detail: record }));
     window.dispatchEvent(new CustomEvent('ap_questions_updated'));
     window.dispatchEvent(new CustomEvent('ap_profile_updated'));
+    window.dispatchEvent(new CustomEvent('ap_streak_updated'));
   }
 
   return record;

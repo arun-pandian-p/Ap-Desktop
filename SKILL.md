@@ -31,11 +31,6 @@ Before initiating a release build, ensure the version numbers match across all 3
    ```iss
    #define MyAppVersion "1.0.0"
    ```
-3. **[`src-tauri/Cargo.toml`](file:///c:/Users/Rishi/OneDrive/Desktop/ap/src-tauri/Cargo.toml)**:
-   ```toml
-   [package]
-   version = "1.0.0"
-   ```
 
 ---
 

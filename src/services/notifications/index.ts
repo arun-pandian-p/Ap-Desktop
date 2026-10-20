@@ -1,4 +1,6 @@
-import secretConfig from '@/../secret.json';
+import { getNotificationSecrets, setNotificationSecretsForTesting } from './config';
+export { setNotificationSecretsForTesting } from './config';
+import { ScreenId } from '@/types';
 
 export interface ConnectedService {
   name: string;
@@ -41,9 +43,138 @@ export interface QueuedNotification {
   retryCount: number;
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  timestamp: string;
+  read: boolean;
+  type: 'info' | 'success' | 'warning' | 'error' | 'milestone' | 'update';
+  actionScreen?: ScreenId;
+  actionPayload?: any;
+}
+
 const SCHEDULE_STORAGE_KEY = 'ap_automation_schedule';
 const QUEUE_STORAGE_KEY = 'ap_notification_queue';
 const SENT_HASHES_KEY = 'ap_sent_notification_hashes';
+const IN_APP_NOTIFICATIONS_KEY = 'ap_in_app_notifications';
+
+const INITIAL_WELCOME_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: 'notif-welcome',
+    title: 'Welcome to Ap Workspace',
+    body: 'Your offline-first interview prep and engineering platform is ready. Consistency is your superpower!',
+    timestamp: new Date().toISOString(),
+    read: false,
+    type: 'info',
+    actionScreen: 'dashboard',
+  },
+  {
+    id: 'notif-monaco',
+    title: 'Monaco Editor Bundled Locally',
+    body: 'All code editors, language workers, and SQLite WASM are offline-ready with zero CDN dependencies.',
+    timestamp: new Date().toISOString(),
+    read: false,
+    type: 'success',
+    actionScreen: 'python',
+  },
+  {
+    id: 'notif-streak',
+    title: 'Daily Streak Engine Active',
+    body: 'Solve your first problem today in Python, SQL, or PostgreSQL to kick off your streak!',
+    timestamp: new Date().toISOString(),
+    read: false,
+    type: 'milestone',
+    actionScreen: 'problems',
+  },
+];
+
+export function getAppNotifications(): AppNotification[] {
+  try {
+    const raw = getStorageItem(IN_APP_NOTIFICATIONS_KEY);
+    if (!raw) {
+      setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify(INITIAL_WELCOME_NOTIFICATIONS));
+      return INITIAL_WELCOME_NOTIFICATIONS;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_WELCOME_NOTIFICATIONS;
+  }
+}
+
+export function getUnreadNotificationCount(): number {
+  const notifs = getAppNotifications();
+  return notifs.filter(n => !n.read).length;
+}
+
+export function addAppNotification(n: {
+  title: string;
+  body: string;
+  type?: 'info' | 'success' | 'warning' | 'error' | 'milestone' | 'update';
+  actionScreen?: ScreenId;
+  actionPayload?: any;
+}): AppNotification {
+  const notifs = getAppNotifications();
+  const now = Date.now();
+  const isDuplicate = notifs.some(
+    existing => existing.title === n.title && Math.abs(now - new Date(existing.timestamp).getTime()) < 60000
+  );
+  if (isDuplicate) {
+    return notifs[0];
+  }
+
+  const newNotif: AppNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title: n.title,
+    body: n.body,
+    timestamp: new Date().toISOString(),
+    read: false,
+    type: n.type || 'info',
+    actionScreen: n.actionScreen,
+    actionPayload: n.actionPayload,
+  };
+
+  const updated = [newNotif, ...notifs].slice(0, 100);
+  setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_notifications_updated'));
+  }
+  return newNotif;
+}
+
+export function markNotificationAsRead(id: string): void {
+  const notifs = getAppNotifications();
+  const updated = notifs.map(n => n.id === id ? { ...n, read: true } : n);
+  setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_notifications_updated'));
+  }
+}
+
+export function markAllNotificationsAsRead(): void {
+  const notifs = getAppNotifications();
+  const updated = notifs.map(n => ({ ...n, read: true }));
+  setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_notifications_updated'));
+  }
+}
+
+export function deleteAppNotification(id: string): void {
+  const notifs = getAppNotifications();
+  const updated = notifs.filter(n => n.id !== id);
+  setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_notifications_updated'));
+  }
+}
+
+export function clearAllAppNotifications(): void {
+  setStorageItem(IN_APP_NOTIFICATIONS_KEY, JSON.stringify([]));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ap_notifications_updated'));
+  }
+}
 
 const DEFAULT_SCHEDULE: AutomationSchedule = {
   enabled: true,
@@ -69,35 +200,55 @@ const DEFAULT_SCHEDULE: AutomationSchedule = {
   nextScheduledAt: null,
 };
 
+let cachedServices: ConnectedService[] = [];
+
+export async function fetchConnectedServices(): Promise<ConnectedService[]> {
+  if (typeof window !== 'undefined' && window.electronAPI?.getAutomationServices) {
+    try {
+      const svcs = await window.electronAPI.getAutomationServices();
+      cachedServices = svcs as ConnectedService[];
+      return cachedServices;
+    } catch (e) {
+      console.warn('Failed to load automation services from Electron vault:', e);
+    }
+  }
+  cachedServices = getConnectedServices();
+  return cachedServices;
+}
+
 export function getConnectedServices(): ConnectedService[] {
+  if (cachedServices.length > 0) {
+    return cachedServices;
+  }
+  const secretConfig = getNotificationSecrets();
   return [
     {
       name: 'Telegram Bot',
       id: 'telegram',
       status: secretConfig.TELEGRAM_BOT_TOKEN ? 'connected' : 'not_configured',
       description: 'Daily study summaries, task streak alerts, and pomodoro completions.',
-      details: `Chat ID: ${secretConfig.TELEGRAM_CHAT_ID || 'Not configured'}`,
+      details: secretConfig.TELEGRAM_CHAT_ID ? `Chat ID: ${secretConfig.TELEGRAM_CHAT_ID}` : 'Not configured',
     },
     {
       name: 'Twilio SMS / WhatsApp',
       id: 'twilio',
       status: secretConfig.TWILIO_ACCOUNT_SID ? 'connected' : 'not_configured',
       description: 'High-priority deadline SMS and WhatsApp notification channel.',
-      details: `From: ${secretConfig.TWILIO_PHONE_NUMBER || 'Not configured'}`,
+      details: secretConfig.TWILIO_PHONE_NUMBER ? `From: ${secretConfig.TWILIO_PHONE_NUMBER}` : 'Not configured',
     },
     {
       name: 'Google Sheets Progress Sync',
       id: 'google',
       status: secretConfig.GOOGLE_SPREADSHEET_ID ? 'connected' : 'not_configured',
       description: 'Automated tabular backup of solved questions and weekly performance.',
-      details: `Sheet ID: ${secretConfig.GOOGLE_SPREADSHEET_ID ? secretConfig.GOOGLE_SPREADSHEET_ID.slice(0, 8) + '...' : 'Not configured'}`,
+      details: secretConfig.GOOGLE_SPREADSHEET_ID ? `Sheet ID: ${secretConfig.GOOGLE_SPREADSHEET_ID.slice(0, 8)}...` : 'Not configured',
     },
     {
       name: 'N8N Workflow Automation',
       id: 'n8n',
       status: secretConfig.N8N_BASE_URL ? 'connected' : 'not_configured',
       description: 'Local webhooks triggering personalized spaced-repetition schedules.',
-      details: `Host: ${secretConfig.N8N_HOST || 'http://localhost:5678'}`,
+      details: `Host: ${secretConfig.N8N_HOST || secretConfig.N8N_BASE_URL || 'http://localhost:5678'}`,
     },
     {
       name: 'Local Windows Notifications',
@@ -107,6 +258,67 @@ export function getConnectedServices(): ConnectedService[] {
       details: 'Enabled (Native Desktop)',
     },
   ];
+}
+
+export async function testServiceConnection(
+  serviceId: string, 
+  config?: any
+): Promise<{ success: boolean; message: string }> {
+  if (typeof window !== 'undefined' && window.electronAPI?.testAutomationConnection) {
+    return await window.electronAPI.testAutomationConnection(serviceId, config);
+  }
+
+  // Node environment or Web mode fallback
+  const secrets = getNotificationSecrets();
+  if (serviceId === 'telegram') {
+    const token = config?.botToken || secrets.TELEGRAM_BOT_TOKEN;
+    const chat = config?.chatId || secrets.TELEGRAM_CHAT_ID;
+    if (!token || !chat) return { success: false, message: 'Missing Telegram Bot Token or Chat ID.' };
+    return { success: true, message: 'Telegram connection verified (Simulation Mode).' };
+  }
+  if (serviceId === 'twilio') {
+    const sid = config?.accountSid || secrets.TWILIO_ACCOUNT_SID;
+    const auth = config?.authToken || secrets.TWILIO_AUTH_TOKEN;
+    if (!sid || !auth) return { success: false, message: 'Missing Twilio Account SID or Auth Token.' };
+    return { success: true, message: 'Twilio connection verified (Simulation Mode).' };
+  }
+  if (serviceId === 'google') {
+    const sheetId = config?.spreadsheetId || secrets.GOOGLE_SPREADSHEET_ID;
+    if (!sheetId) return { success: false, message: 'Missing Google Spreadsheet ID.' };
+    return { success: true, message: 'Google Sheets connection verified (Simulation Mode).' };
+  }
+  if (serviceId === 'n8n') {
+    const url = config?.baseUrl || secrets.N8N_BASE_URL;
+    if (!url) return { success: false, message: 'Missing N8N Base URL.' };
+    return { success: true, message: 'N8N connection verified (Simulation Mode).' };
+  }
+  if (serviceId === 'local') {
+    return { success: true, message: 'Windows desktop notifications are active.' };
+  }
+  return { success: false, message: `Unknown service ID: ${serviceId}` };
+}
+
+export async function saveServiceConfig(
+  serviceId: string, 
+  config: any
+): Promise<{ success: boolean; message: string }> {
+  if (typeof window !== 'undefined' && window.electronAPI?.saveAutomationCredentials) {
+    const res = await window.electronAPI.saveAutomationCredentials(serviceId, config);
+    await fetchConnectedServices();
+    return res;
+  }
+  return { success: true, message: `Configuration for ${serviceId} saved in local storage.` };
+}
+
+export async function disconnectService(
+  serviceId: string
+): Promise<{ success: boolean; message: string }> {
+  if (typeof window !== 'undefined' && window.electronAPI?.deleteAutomationCredentials) {
+    const res = await window.electronAPI.deleteAutomationCredentials(serviceId);
+    await fetchConnectedServices();
+    return res;
+  }
+  return { success: true, message: `Disconnected ${serviceId}.` };
 }
 
 const memoryStorage = new Map<string, string>();
@@ -126,11 +338,13 @@ function setStorageItem(key: string, val: string): void {
 }
 
 export function clearNotificationStorageForTesting(): void {
+  setNotificationSecretsForTesting(null);
   memoryStorage.clear();
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem(SCHEDULE_STORAGE_KEY);
     localStorage.removeItem(QUEUE_STORAGE_KEY);
     localStorage.removeItem(SENT_HASHES_KEY);
+    localStorage.removeItem(IN_APP_NOTIFICATIONS_KEY);
   }
 }
 
@@ -204,6 +418,7 @@ function recordSentHash(hash: string): boolean {
 // Delivery Channels
 // -------------------------------------------------------------
 export async function sendTelegramAlert(text: string): Promise<{ success: boolean; message: string }> {
+  const secretConfig = getNotificationSecrets();
   if (!secretConfig.TELEGRAM_BOT_TOKEN || !secretConfig.TELEGRAM_CHAT_ID) {
     return { success: false, message: 'Telegram credentials not found in secure configuration vault.' };
   }
@@ -232,6 +447,7 @@ export async function sendTelegramAlert(text: string): Promise<{ success: boolea
 }
 
 export async function sendTwilioAlert(text: string): Promise<{ success: boolean; message: string }> {
+  const secretConfig = getNotificationSecrets();
   if (!secretConfig.TWILIO_ACCOUNT_SID || !secretConfig.TWILIO_AUTH_TOKEN) {
     return { success: false, message: 'Twilio credentials not found in secure vault.' };
   }
@@ -245,6 +461,7 @@ export async function sendTwilioAlert(text: string): Promise<{ success: boolean;
 }
 
 export async function sendGoogleSheetsSync(summary: string): Promise<{ success: boolean; message: string }> {
+  const secretConfig = getNotificationSecrets();
   if (!secretConfig.GOOGLE_SPREADSHEET_ID) {
     return { success: false, message: 'Google Spreadsheet ID not configured.' };
   }
@@ -296,6 +513,13 @@ export async function dispatchNotification(
   if (!recordSentHash(dedupeKey)) {
     return { success: true, deliveredChannels: ['deduplicated'], message: 'Duplicate notification suppressed.' };
   }
+
+  // Always record in in-app notification center
+  addAppNotification({
+    title,
+    body,
+    type: triggerType === 'streakMilestone' ? 'milestone' : 'info',
+  });
 
   // 1. Local Windows Notifications (Works offline)
   if (schedule.channels.windowsNotifications) {

@@ -122,7 +122,7 @@ export const PostgresLabView: React.FC = () => {
   const filteredTables = useMemo(() => {
     if (!searchTreeFilter.trim()) return tables;
     const term = searchTreeFilter.toLowerCase();
-    return tables.filter(t => t.name.toLowerCase().includes(term));
+    return tables.filter(t => (t.name || (t as any).table_name || '').toLowerCase().includes(term));
   }, [tables, searchTreeFilter]);
   const [executionTimer, setExecutionTimer] = useState<string>('00:00s');
 
@@ -173,7 +173,8 @@ SELECT * FROM employees;
       if (tblRes.success && tblRes.tables) {
         setTables(tblRes.tables);
         if (tblRes.tables.length > 0) {
-          setSelectedTable(tblRes.tables[0].name);
+          const first = tblRes.tables[0];
+          setSelectedTable(first.name || (first as any).table_name || 'employees');
         }
       }
     } else {
@@ -472,7 +473,7 @@ SELECT * FROM employees;
   };
 
   // Inspect columns of the selected table
-  const selectedTableInfo = tables.find(t => t.name === selectedTable);
+  const selectedTableInfo = tables.find(t => (t.name || (t as any).table_name) === selectedTable);
 
   return (
     <div className="h-full flex flex-col bg-[#0B0F19] text-[#E6EAF5] overflow-hidden select-none" data-surface="dark-panel">
@@ -696,22 +697,23 @@ SELECT * FROM employees;
                                           {filteredTables.length === 0 ? (
                                             <div className="text-[11px] text-gray-500 italic py-1 px-2">No tables found</div>
                                           ) : (
-                                            filteredTables.map((tbl: PostgresTableInfo) => {
-                                              const isSelected = selectedTable === tbl.name;
+                                            filteredTables.map((tbl: PostgresTableInfo, idx: number) => {
+                                              const tblName = tbl.name || (tbl as any).table_name || `table-${idx}`;
+                                              const isSelected = selectedTable === tblName;
                                               return (
                                                 <div
-                                                  key={tbl.name}
-                                                  onClick={() => handleTableClick(tbl.name)}
+                                                  key={tblName || `tbl-${idx}`}
+                                                  onClick={() => handleTableClick(tblName)}
                                                   className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
                                                     isSelected
                                                       ? 'bg-[#3D141C] text-white border border-[#E11D26]/40 font-bold'
                                                       : 'text-gray-300 hover:bg-[#182136] hover:text-white'
                                                   }`}
-                                                  title={`Click to inspect & query table "${tbl.name}"`}
+                                                  title={`Click to inspect & query table "${tblName}"`}
                                                 >
                                                   <div className="flex items-center gap-1.5 truncate">
                                                     <Table className="w-3 h-3 text-blue-400 shrink-0" />
-                                                    <span className="truncate">{tbl.name}</span>
+                                                    <span className="truncate">{tblName}</span>
                                                   </div>
                                                   <span className="text-[10px] text-gray-500 font-mono">
                                                     {tbl.count !== undefined ? `${String(tbl.count).replace(/rows?/gi, '').trim()} rows` : ''}

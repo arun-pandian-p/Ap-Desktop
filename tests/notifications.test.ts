@@ -7,7 +7,8 @@ import {
   getQueuedNotifications,
   saveQueuedNotifications,
   processOfflineQueue,
-  clearNotificationStorageForTesting
+  clearNotificationStorageForTesting,
+  setNotificationSecretsForTesting
 } from '../src/services/notifications';
 
 describe('Connected Services & Automation Scheduler', () => {
@@ -19,8 +20,20 @@ describe('Connected Services & Automation Scheduler', () => {
   });
 
   it('should detect configured services from secret.json', () => {
-    const services = getConnectedServices();
+    // 1. Without credentials, external channels are not_configured while local remains connected
+    setNotificationSecretsForTesting(null);
+    let services = getConnectedServices();
     expect(services.length).toBeGreaterThanOrEqual(4);
+    expect(services.find(s => s.id === 'telegram')?.status).toBe('not_configured');
+    expect(services.find(s => s.id === 'local')?.status).toBe('connected');
+
+    // 2. With credentials supplied, services report connected
+    setNotificationSecretsForTesting({
+      TELEGRAM_BOT_TOKEN: 'test_token',
+      TELEGRAM_CHAT_ID: 'test_chat_id',
+      GOOGLE_SPREADSHEET_ID: '1234567890abcdef',
+    });
+    services = getConnectedServices();
 
     const telegram = services.find(s => s.id === 'telegram');
     expect(telegram).toBeDefined();
@@ -32,6 +45,11 @@ describe('Connected Services & Automation Scheduler', () => {
   });
 
   it('should mask sensitive credential details and never expose raw tokens', () => {
+    setNotificationSecretsForTesting({
+      TELEGRAM_BOT_TOKEN: '8711937903:AAGzTyaP1lmwMEWyXbGSLyqdrp0WZO0v54I',
+      TELEGRAM_CHAT_ID: '123456',
+      GOOGLE_SPREADSHEET_ID: '1234567890abcdef',
+    });
     const services = getConnectedServices();
     const telegram = services.find(s => s.id === 'telegram');
     expect(telegram?.details).not.toContain('8711937903:AAGzTyaP1lmwMEWyXbGSLyqdrp0WZO0v54I');

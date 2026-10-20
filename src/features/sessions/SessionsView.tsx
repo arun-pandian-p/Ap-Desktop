@@ -21,6 +21,9 @@ import {
 import { ScreenId } from '@/types';
 import { StudyMusicPlayer } from '@/components/study/StudyMusicPlayer';
 import { studyMusicService } from '@/services/audio/studyMusicService';
+import { focusTimerService, FocusTimerState, FocusMode } from '@/services/timer/focusTimerService';
+import { realtimeService } from '@/services/websocket/realtimeService';
+import { fetchTodayFocusStats, TodayFocusStats } from '@/services/analytics/analyticsService';
 
 interface SessionsViewProps {
   onNavigate: (screen: ScreenId) => void;
@@ -31,21 +34,45 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   onNavigate,
   onOpenStartModal,
 }) => {
-  const [mode, setMode] = useState<'focus' | 'short_break' | 'long_break'>('focus');
-  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
-  const [isActive, setIsActive] = useState(false);
+  const [timerState, setTimerState] = useState<FocusTimerState>(() => focusTimerService.getState());
+  const [timerSettings, setTimerSettings] = useState(() => focusTimerService.getSettings());
   const [idleMinutes, setIdleMinutes] = useState(2);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [playMusicWithSession, setPlayMusicWithSession] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [musicState, setMusicState] = useState(studyMusicService.getState());
+  const [todayStats, setTodayStats] = useState<TodayFocusStats>({
+    totalFocusTimeFormatted: '0m',
+    sessionsFinishedCount: 0,
+    tasksCompletedCount: 0,
+    averageBlockMinutes: 0,
+  });
+
+  const loadTodayStats = async () => {
+    try {
+      const stats = await fetchTodayFocusStats();
+      setTodayStats(stats);
+    } catch {}
+  };
 
   useEffect(() => {
-    const unsub = studyMusicService.subscribe(() => {
+    loadTodayStats();
+    const unsubSession = realtimeService.subscribe('study-session:completed', () => loadTodayStats());
+    const unsubTask = realtimeService.subscribe('task:completed', () => loadTodayStats());
+    const unsubMusic = studyMusicService.subscribe(() => {
       setMusicState(studyMusicService.getState());
     });
-    return () => unsub();
+    const unsubTimer = focusTimerService.subscribe((s) => {
+      setTimerState(s);
+      setTimerSettings(focusTimerService.getSettings());
+    });
+
+    return () => {
+      unsubSession();
+      unsubTask();
+      unsubMusic();
+      unsubTimer();
+    };
   }, []);
 
   const toggleAlwaysOnTop = async () => {
@@ -68,34 +95,16 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFocusMode]);
 
-  useEffect(() => {
-    let interval: any = null;
-    if (isActive && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((s) => s - 1);
-      }, 1000);
-    } else if (secondsLeft === 0 && isActive) {
-      setIsActive(false);
-      if (soundEnabled) {
-        studyMusicService.playCompletionChime();
-      }
-    }
-    return () => clearInterval(interval);
-  }, [isActive, secondsLeft, soundEnabled]);
-
-  const switchMode = (m: 'focus' | 'short_break' | 'long_break') => {
-    setMode(m);
-    setIsActive(false);
-    if (m === 'focus') setSecondsLeft(25 * 60);
-    else if (m === 'short_break') setSecondsLeft(5 * 60);
-    else setSecondsLeft(15 * 60);
+  const switchMode = (m: FocusMode) => {
+    focusTimerService.setMode(m);
   };
 
   const handleToggleTimer = () => {
-    const nextActive = !isActive;
-    setIsActive(nextActive);
+    const willRun = !timerState.isRunning;
+    focusTimerService.toggle();
+
     if (playMusicWithSession) {
-      if (nextActive) {
+      if (willRun) {
         studyMusicService.play();
       } else {
         studyMusicService.pause();
@@ -104,8 +113,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   };
 
   const handleResetTimer = () => {
-    setIsActive(false);
-    switchMode(mode);
+    focusTimerService.reset();
   };
 
   const formatTime = (totalSec: number) => {
@@ -114,8 +122,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const totalDuration = mode === 'focus' ? 25 * 60 : mode === 'short_break' ? 5 * 60 : 15 * 60;
-  const progressPercent = ((totalDuration - secondsLeft) / totalDuration) * 100;
+  const mode = timerState.mode;
+  const secondsLeft = timerState.remainingSeconds;
+  const isActive = timerState.isRunning;
+  const soundEnabled = timerSettings.soundEnabled;
+  const progressPercent =
+    timerState.totalDurationSeconds > 0
+      ? ((timerState.totalDurationSeconds - timerState.remainingSeconds) / timerState.totalDurationSeconds) * 100
+      : 0;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[calc(100vh-5rem)]">
@@ -352,7 +366,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                   <input
                     type="checkbox"
                     checked={soundEnabled}
-                    onChange={(e) => setSoundEnabled(e.target.checked)}
+                    onChange={(e) => focusTimerService.saveSettings({ soundEnabled: e.target.checked })}
                     className="w-3.5 h-3.5 rounded text-[#E11D26]"
                   />
                 </label>
@@ -385,19 +399,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-gray-50 rounded-xl">
                 <span className="text-[11px] text-gray-500">Total Focus Time</span>
-                <div className="text-xl font-black text-gray-900 mt-0.5">4h 12m</div>
+                <div className="text-xl font-black text-gray-900 mt-0.5">{todayStats.totalFocusTimeFormatted}</div>
               </div>
               <div className="p-3 bg-gray-50 rounded-xl">
                 <span className="text-[11px] text-gray-500">Sessions Finished</span>
-                <div className="text-xl font-black text-emerald-600 mt-0.5">7 Blocks</div>
+                <div className="text-xl font-black text-emerald-600 mt-0.5">{todayStats.sessionsFinishedCount} Blocks</div>
               </div>
               <div className="p-3 bg-gray-50 rounded-xl">
                 <span className="text-[11px] text-gray-500">Tasks Completed</span>
-                <div className="text-xl font-black text-blue-600 mt-0.5">3 Tasks</div>
+                <div className="text-xl font-black text-blue-600 mt-0.5">{todayStats.tasksCompletedCount} Tasks</div>
               </div>
               <div className="p-3 bg-gray-50 rounded-xl">
                 <span className="text-[11px] text-gray-500">Average Block</span>
-                <div className="text-xl font-black text-gray-900 mt-0.5">26.5 min</div>
+                <div className="text-xl font-black text-gray-900 mt-0.5">{todayStats.averageBlockMinutes} min</div>
               </div>
             </div>
           </div>

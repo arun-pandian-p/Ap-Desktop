@@ -3,7 +3,7 @@
   "description": "Ap Desktop - Interview Preparation, Coding Practice & Learning Platform",
   "author": "Ap Team",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -15,7 +15,14 @@
     "seed:demo": "node scripts/seed-demo.js",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "electron:build:dev": "npm run build && electron-builder --dir",
-    "electron:dist": "npm run build && electron-builder --win nsis"
+    "electron:dist": "npm run build && electron-builder --win nsis",
+    "build:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -SkipFrontendBuild -SkipUnpack",
+    "build:release": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
+    "version:bump": "node scripts/bump-version.mjs patch",
+    "version:patch": "node scripts/bump-version.mjs patch",
+    "version:minor": "node scripts/bump-version.mjs minor",
+    "version:major": "node scripts/bump-version.mjs major",
+    "version:sync": "node scripts/bump-version.mjs sync"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

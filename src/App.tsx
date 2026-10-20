@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ScreenId, AccentColor, ThemeMode, Task, Question, LicenseState } from '@/types';
+import { ScreenId, AccentColor, ThemeMode, Task, Question, LicenseState, Track } from '@/types';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ToastContainer, ToastMessage } from '@/components/common/Toast';
 import { CreateTaskModal } from '@/components/dialogs/CreateTaskModal';
 import { StartSessionModal } from '@/components/dialogs/StartSessionModal';
 import { BackupRestoreModal } from '@/components/dialogs/BackupRestoreModal';
+import { ImportDataModal } from '@/components/dialogs/ImportDataModal';
 import { CommandPalette } from '@/components/dialogs/CommandPalette';
 
 import { DashboardView } from '@/features/dashboard/DashboardView';
@@ -50,9 +51,13 @@ export const App: React.FC = () => {
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [isStartSessionOpen, setIsStartSessionOpen] = useState(false);
   const [isBackupOpen, setIsBackupOpen] = useState(false);
+  const [backupModalTab, setBackupModalTab] = useState<'create' | 'restore'>('create');
+  const [isImportDataOpen, setIsImportDataOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const [selectedProblem, setSelectedProblem] = useState<Question | undefined>();
+  const [selectedTrack, setSelectedTrack] = useState<Track | undefined>();
+  const [searchProblemQuery, setSearchProblemQuery] = useState<string>('');
 
   // Lock / Unlock handlers
   const handleUnlock = (name: string) => {
@@ -123,7 +128,8 @@ export const App: React.FC = () => {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // Ctrl+Shift+P toggles command palette
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
       }
@@ -176,6 +182,18 @@ export const App: React.FC = () => {
         onLock={handleLock}
         themeMode={themeMode}
         onToggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
+        onSelectProblem={(p) => {
+          setSelectedProblem(p);
+          setCurrentScreen('python');
+        }}
+        onSelectTrack={(t) => {
+          setSelectedTrack(t);
+          setCurrentScreen('problems');
+        }}
+        onSearchProblems={(q) => {
+          setSearchProblemQuery(q);
+          setCurrentScreen('problems');
+        }}
       />
 
       {/* 2. Middle Body: Sidebar + Active Screen */}
@@ -208,16 +226,22 @@ export const App: React.FC = () => {
                 setSelectedProblem(p);
                 setCurrentScreen('python');
               }}
+              selectedTrack={selectedTrack}
+              initialSearch={searchProblemQuery}
             />
           )}
 
           {currentScreen === 'tracks' && (
             <TracksView
               onNavigate={setCurrentScreen}
+              onSelectTrack={(t) => {
+                setSelectedTrack(t);
+                setCurrentScreen('problems');
+              }}
             />
           )}
 
-          {currentScreen === 'python' && (
+          {(currentScreen === 'python' || currentScreen === 'practice') && (
             <PythonPracticeView
               initialProblem={selectedProblem}
             />
@@ -276,7 +300,11 @@ export const App: React.FC = () => {
               license={license}
               onRefreshLicense={() => setLicense(getCurrentLicense())}
               onShowToast={addToast}
-              onOpenBackupModal={() => setIsBackupOpen(true)}
+              onOpenBackupModal={(tab = 'create') => {
+                setBackupModalTab(tab);
+                setIsBackupOpen(true);
+              }}
+              onOpenImportModal={() => setIsImportDataOpen(true)}
               onNavigate={setCurrentScreen}
             />
           )}
@@ -309,6 +337,13 @@ export const App: React.FC = () => {
       <BackupRestoreModal
         isOpen={isBackupOpen}
         onClose={() => setIsBackupOpen(false)}
+        onSuccess={(msg) => addToast(msg, 'success')}
+        initialTab={backupModalTab}
+      />
+
+      <ImportDataModal
+        isOpen={isImportDataOpen}
+        onClose={() => setIsImportDataOpen(false)}
         onSuccess={(msg) => addToast(msg, 'success')}
       />
 

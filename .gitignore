@@ -10,7 +10,6 @@ release/
 out/
 build/certs/
 scratch/
-src-tauri/target/
 
 # Certificates & Private Keys
 *.pfx

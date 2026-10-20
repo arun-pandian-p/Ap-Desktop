@@ -10,6 +10,12 @@ Write-Host "==========================================================" -Foregro
 Write-Host "  Ap -- Windows Production Release and Inno Setup Packager" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
+# 0. Synchronize version
+node "$ProjectRoot\scripts\bump-version.mjs" sync
+$PackageJson = Get-Content "$ProjectRoot\package.json" -Raw | ConvertFrom-Json
+$AppVersion = $PackageJson.version
+Write-Host "`n[Release Target] Version: v$AppVersion" -ForegroundColor Green
+
 # 1. Step 1: Validate Frontend Build and Update Unpacked Runtime
 if (-not $SkipFrontendBuild) {
     Write-Host "`n[1/4] Building Frontend Production Bundle (Vite + TS)..." -ForegroundColor Yellow
@@ -71,9 +77,6 @@ if (-not (Test-Path $ReleaseDir)) {
 
 # 4. Step 4: Validate Executable Binary
 $ExeTarget = "$ProjectRoot\release\win-unpacked\Ap.exe"
-if (-not (Test-Path $ExeTarget)) {
-    $ExeTarget = "$ProjectRoot\src-tauri\target\release\Ap.exe"
-}
 $isRealBinary = $false
 if (Test-Path $ExeTarget) {
     $bytes = [System.IO.File]::ReadAllBytes($ExeTarget)
@@ -93,9 +96,9 @@ if ($isRealBinary) {
         Write-Warning "Inno Setup compilation encountered an issue."
     }
 } else {
-    Write-Host "  [INFO] src-tauri\target\release\Ap.exe is not yet compiled as a native PE binary." -ForegroundColor DarkYellow
+    Write-Host "  [INFO] Packaged Electron executable 'release\win-unpacked\Ap.exe' was not found." -ForegroundColor DarkYellow
+    Write-Host "  Run 'npm run electron:build:dev' to generate the unpacked Electron distribution before packaging." -ForegroundColor Gray
     Write-Host "  [READY] Inno Setup script is validated and ready at: $IssFile" -ForegroundColor Cyan
-    Write-Host "  Trigger the GitHub Actions workflow (.github/workflows/build-release.yml) to compile the native Rust binary and package the release." -ForegroundColor Gray
 }
 
 # 5. Step 5: Checksum and Release Inventory
@@ -103,7 +106,7 @@ Write-Host "`n[4/4] Release Artifacts and Inventory:" -ForegroundColor Yellow
 Write-Host "  - Frontend bundle: $ProjectRoot\dist" -ForegroundColor White
 Write-Host "  - SQLite WebAssembly: $ProjectRoot\dist\sql-wasm.wasm" -ForegroundColor White
 Write-Host "  - Inno Setup Script: $IssFile" -ForegroundColor White
-Write-Host "  - Output Target: $ReleaseDir\Ap_Setup_v1.0.0_x64.exe" -ForegroundColor White
+Write-Host "  - Output Target: $ReleaseDir\Ap_Desktop_Setup_v${AppVersion}_x64.exe" -ForegroundColor White
 
 Write-Host "`n==========================================================" -ForegroundColor Cyan
 Write-Host "  Build and Packaging Script Ready!                       " -ForegroundColor Cyan

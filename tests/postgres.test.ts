@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { 
   postgresTestConnection, 
   postgresGetTables, 
@@ -14,6 +14,29 @@ describe('PostgreSQL Lab (Genuine Server Integration)', () => {
     user: 'postgres',
     password: '2030',
   };
+
+  beforeAll(async () => {
+    try {
+      await postgresExecuteQuery(validConfig, `
+        CREATE TABLE IF NOT EXISTS employees (
+          employee_id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          department VARCHAR(50) NOT NULL,
+          salary NUMERIC(10, 2) NOT NULL
+        );
+      `);
+      const checkRes = await postgresExecuteQuery(validConfig, `SELECT COUNT(*) FROM employees;`);
+      const count = Number(checkRes.values?.[0]?.[0] || 0);
+      if (count === 0) {
+        await postgresExecuteQuery(validConfig, `
+          INSERT INTO employees (name, department, salary) VALUES
+          ('Arun Pandian', 'Engineering', 125000),
+          ('Priya Sharma', 'Product', 110000),
+          ('Rahul Verma', 'Engineering', 115000);
+        `);
+      }
+    } catch {}
+  });
 
   it('should successfully connect to the genuine PostgreSQL 16 server with user password', async () => {
     const res = await postgresTestConnection(validConfig);
@@ -47,7 +70,7 @@ describe('PostgreSQL Lab (Genuine Server Integration)', () => {
     expect(res.success).toBe(true);
     expect(res.columns).toEqual(['employee_id', 'name', 'department', 'salary']);
     expect(res.row_count).toBeGreaterThanOrEqual(3);
-    expect(res.values?.[0]).toContain('Arun');
+    expect(res.values?.[0]?.[1]).toContain('Arun');
   });
 
   it('should return server-level PostgreSQL syntax or relation errors without falling back to SQLite', async () => {

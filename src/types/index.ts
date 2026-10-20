@@ -5,6 +5,7 @@ export type ScreenId =
   | 'tracks'
   | 'problems'
   | 'python'
+  | 'practice'
   | 'sql'
   | 'postgres'
   | 'planner'
@@ -47,6 +48,8 @@ export interface Track {
   solved_problems?: number;
   estimated_hours?: string;
   icon?: string;
+  category?: string;
+  tags?: string[];
 }
 
 export interface Topic {
@@ -67,6 +70,8 @@ export interface Subtopic {
   subtopic_order: number;
 }
 
+export type VerificationStatus = 'verified' | 'partially_verified' | 'unverified' | 'invalid';
+
 export interface Question {
   id: string;
   subtopic_id?: string;
@@ -85,6 +90,20 @@ export interface Question {
   order_num: number;
   last_attempted?: string;
   is_bookmarked?: boolean;
+  created_at?: string;
+
+  // Problem Verification & Provenance Metadata
+  verification_status?: VerificationStatus;
+  source_url?: string;
+  source_attribution?: string;
+  source_license?: string;
+  original_statement?: string;
+  ap_authored_statement?: string;
+  public_examples_json?: string;
+  private_tests_json?: string;
+  reference_implementation?: string;
+  verification_diagnostics?: string;
+  verified_at?: string;
 }
 
 export interface Task {
@@ -134,10 +153,10 @@ export interface Attempt {
   problem_title?: string;
   difficulty?: string;
   category?: string;
-  problem_type?: 'python' | 'sql' | 'postgres';
+  problem_type?: 'python' | 'java' | 'cpp' | 'sql' | 'postgres' | string;
   language: string;
   code: string;
-  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error';
+  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error' | 'Runtime Unavailable' | string;
   runtime_ms: number;
   memory_kb: number;
   test_cases_passed: number;
@@ -151,10 +170,10 @@ export interface SubmissionRecord {
   problem_title: string;
   difficulty: string;
   category?: string;
-  problem_type?: 'python' | 'sql' | 'postgres';
+  problem_type?: 'python' | 'java' | 'cpp' | 'sql' | 'postgres' | string;
   language: string;
   code: string;
-  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error';
+  status: 'Accepted' | 'Wrong Answer' | 'Time Limit Exceeded' | 'Runtime Error' | 'Compilation Error' | 'Runtime Unavailable' | string;
   runtime_ms?: number;
   memory_kb?: number;
   test_cases_passed?: number;

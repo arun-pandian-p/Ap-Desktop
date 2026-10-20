@@ -1,7 +1,9 @@
-import { Question } from '@/types';
+import { Question, VerificationStatus } from '@/types';
 
 export interface ProblemDetail {
   starterCode: string;
+  starterCodeJava?: string;
+  starterCodeCpp?: string;
   testCases: Array<{ input: string; expected: string; explanation?: string }>;
   description: string;
   examples: Array<{ input: string; output: string; explanation: string }>;
@@ -10,10 +12,17 @@ export interface ProblemDetail {
     approach: string;
     complexity: string;
   };
+  referenceImplementation?: Function;
+  sourceAttribution?: string;
+  sourceUrl?: string;
+  sourceLicense?: string;
+  isApAuthored?: boolean;
+  isCanonicalVerified?: boolean;
+  verificationStatus?: VerificationStatus;
 }
 
 // -------------------------------------------------------------
-// Canonical Catalog of High-Fidelity DSA Presets
+// Canonical Catalog of Deterministically Verified DSA Presets
 // -------------------------------------------------------------
 const canonicalPresets: Record<string, (q: Question) => ProblemDetail> = {
   'even_or_odd': () => ({
@@ -30,13 +39,15 @@ A number is even if it is completely divisible by 2 (i.e. \`n % 2 == 0\`). Other
       'Time Complexity: O(1)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> str:
     # Check parity using bitwise AND or modulo
     return "Even" if n % 2 == 0 else "Odd"
 
 # Local test:
 print("Test parity for 4:", solve(4))
 `,
+    starterCodeJava: `import java.util.*;\n\npublic class Solution {\n    public static String solve(int n) {\n        return (n % 2 == 0) ? "Even" : "Odd";\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextInt()) {\n            int n = sc.nextInt();\n            System.out.println(solve(n));\n        }\n    }\n}\n`,
+    starterCodeCpp: `#include <iostream>\n#include <string>\n\nusing namespace std;\n\nstring solve(int n) {\n    return (n % 2 == 0) ? "Even" : "Odd";\n}\n\nint main() {\n    int n;\n    if (cin >> n) {\n        cout << solve(n) << endl;\n    }\n    return 0;\n}\n`,
     testCases: [
       { input: '(4)', expected: '"Even"', explanation: '4 is even' },
       { input: '(7)', expected: '"Odd"', explanation: '7 is odd' },
@@ -46,6 +57,12 @@ print("Test parity for 4:", solve(4))
       approach: 'Use the modulo operator `n % 2 == 0` or bitwise parity check `(n & 1) == 0`.',
       complexity: 'Time: O(1) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => (n % 2 === 0 ? 'Even' : 'Odd'),
+    sourceAttribution: 'GeeksforGeeks Parity Problem Reference',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/odd-or-even3618/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'last_digit': () => ({
@@ -63,13 +80,15 @@ For example, if the input is \`9874\`, the units place digit is \`4\`. For singl
       'Time Complexity: O(1)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> int:
     # Return the unit place digit
     return abs(n) % 10
 
 # Local test:
 print("Last digit of 9874:", solve(9874))
 `,
+    starterCodeJava: `import java.util.*;\n\npublic class Solution {\n    public static int solve(long n) {\n        return (int)(Math.abs(n) % 10);\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextLong()) {\n            long n = sc.nextLong();\n            System.out.println(solve(n));\n        }\n    }\n}\n`,
+    starterCodeCpp: `#include <iostream>\n#include <cmath>\n\nusing namespace std;\n\nint solve(long long n) {\n    return abs(n) % 10;\n}\n\nint main() {\n    long long n;\n    if (cin >> n) {\n        cout << solve(n) << endl;\n    }\n    return 0;\n}\n`,
     testCases: [
       { input: '(9874)', expected: '4', explanation: '9874 % 10 = 4' },
       { input: '(5)', expected: '5', explanation: '5 % 10 = 5' },
@@ -79,6 +98,12 @@ print("Last digit of 9874:", solve(9874))
       approach: 'Compute `abs(n) % 10` to directly extract the rightmost decimal digit in constant time.',
       complexity: 'Time: O(1) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => Math.abs(n) % 10,
+    sourceAttribution: 'GeeksforGeeks Math Foundations',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/last-digit-of-a-number/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'count_digits': () => ({
@@ -95,13 +120,15 @@ If \`n = 156\`, it contains the digits \`1\`, \`5\`, and \`6\`, so the count is 
       'Time Complexity: O(log10(N)) or O(1) via string conversion',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> int:
     # Count digits by length or continuous division
     return len(str(abs(n)))
 
 # Local test:
 print("Digit count for 156:", solve(156))
 `,
+    starterCodeJava: `import java.util.*;\n\npublic class Solution {\n    public static int solve(long n) {\n        return String.valueOf(Math.abs(n)).length();\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextLong()) {\n            long n = sc.nextLong();\n            System.out.println(solve(n));\n        }\n    }\n}\n`,
+    starterCodeCpp: `#include <iostream>\n#include <string>\n\nusing namespace std;\n\nint solve(long long n) {\n    return to_string(abs(n)).length();\n}\n\nint main() {\n    long long n;\n    if (cin >> n) {\n        cout << solve(n) << endl;\n    }\n    return 0;\n}\n`,
     testCases: [
       { input: '(156)', expected: '3', explanation: '156 has 3 digits' },
       { input: '(7)', expected: '1', explanation: '7 has 1 digit' },
@@ -111,6 +138,12 @@ print("Digit count for 156:", solve(156))
       approach: 'Repeatedly divide the number by 10 until it reaches 0, or calculate `math.floor(math.log10(n)) + 1`.',
       complexity: 'Time: O(log10 N) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => Math.abs(n).toString().length,
+    sourceAttribution: 'GeeksforGeeks Math Foundations',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/count-digits5716/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'reverse_number': () => ({
@@ -128,7 +161,7 @@ If reversing \`n\` causes the value to overflow outside the signed 32-bit intege
       'Time Complexity: O(log10(N))',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> int:
     sign = -1 if n < 0 else 1
     rev = int(str(abs(n))[::-1])
     res = sign * rev
@@ -137,6 +170,8 @@ If reversing \`n\` causes the value to overflow outside the signed 32-bit intege
 # Local test:
 print("Reversed 123:", solve(123))
 `,
+    starterCodeJava: `import java.util.*;\n\npublic class Solution {\n    public static int solve(int n) {\n        int rev = 0;\n        while (n != 0) {\n            int pop = n % 10;\n            n /= 10;\n            if (rev > Integer.MAX_VALUE / 10 || (rev == Integer.MAX_VALUE / 10 && pop > 7)) return 0;\n            if (rev < Integer.MIN_VALUE / 10 || (rev == Integer.MIN_VALUE / 10 && pop < -8)) return 0;\n            rev = rev * 10 + pop;\n        }\n        return rev;\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextInt()) {\n            int n = sc.nextInt();\n            System.out.println(solve(n));\n        }\n    }\n}\n`,
+    starterCodeCpp: `#include <iostream>\n#include <climits>\n\nusing namespace std;\n\nint solve(int n) {\n    int rev = 0;\n    while (n != 0) {\n        int pop = n % 10;\n        n /= 10;\n        if (rev > INT_MAX / 10 || (rev == INT_MAX / 10 && pop > 7)) return 0;\n        if (rev < INT_MIN / 10 || (rev == INT_MIN / 10 && pop < -8)) return 0;\n        rev = rev * 10 + pop;\n    }\n    return rev;\n}\n\nint main() {\n    int n;\n    if (cin >> n) {\n        cout << solve(n) << endl;\n    }\n    return 0;\n}\n`,
     testCases: [
       { input: '(123)', expected: '321', explanation: '123 -> 321' },
       { input: '(-123)', expected: '-321', explanation: '-123 -> -321' },
@@ -146,6 +181,17 @@ print("Reversed 123:", solve(123))
       approach: 'Extract digits using `% 10` and accumulate into `rev = rev * 10 + digit`, checking for 32-bit integer boundary overflow.',
       complexity: 'Time: O(log10 N) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => {
+      const sign = n < 0 ? -1 : 1;
+      const rev = parseInt(Math.abs(n).toString().split('').reverse().join(''), 10);
+      const res = sign * rev;
+      return (res >= -2147483648 && res <= 2147483647) ? res : 0;
+    },
+    sourceAttribution: 'LeetCode #7 (Reverse Integer)',
+    sourceUrl: 'https://leetcode.com/problems/reverse-integer/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'power_number': () => ({
@@ -162,13 +208,15 @@ For large numbers, return the result modulo \`10^9 + 7\`.`,
       '0 <= r <= 10^5',
       'Modulo 1,000,000,007',
     ],
-    starterCode: `def solve(n, r):
+    starterCode: `def solve(n: int, r: int) -> int:
     MOD = 10**9 + 7
     return pow(n, r, MOD)
 
 # Local test:
 print("2^10:", solve(2, 10))
 `,
+    starterCodeJava: `import java.util.*;\n\npublic class Solution {\n    public static long solve(long n, long r) {\n        long MOD = 1000000007L;\n        long res = 1;\n        n = n % MOD;\n        while (r > 0) {\n            if ((r & 1) == 1) res = (res * n) % MOD;\n            r = r >> 1;\n            n = (n * n) % MOD;\n        }\n        return res;\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextLong()) {\n            long n = sc.nextLong();\n            long r = sc.hasNextLong() ? sc.nextLong() : 0;\n            System.out.println(solve(n, r));\n        }\n    }\n}\n`,
+    starterCodeCpp: `#include <iostream>\n\nusing namespace std;\n\nlong long solve(long long n, long long r) {\n    long long MOD = 1000000007LL;\n    long long res = 1;\n    n = n % MOD;\n    while (r > 0) {\n        if (r & 1) res = (res * n) % MOD;\n        r >>= 1;\n        n = (n * n) % MOD;\n    }\n    return res;\n}\n\nint main() {\n    long long n, r;\n    if (cin >> n >> r) {\n        cout << solve(n, r) << endl;\n    }\n    return 0;\n}\n`,
     testCases: [
       { input: '(2, 10)', expected: '1024', explanation: '2^10 = 1024' },
       { input: '(3, 4)', expected: '81', explanation: '3^4 = 81' },
@@ -178,6 +226,23 @@ print("2^10:", solve(2, 10))
       approach: 'Binary exponentiation achieves O(log R) time complexity by halving the exponent at each step.',
       complexity: 'Time: O(log R) | Space: O(1)',
     },
+    referenceImplementation: (n: number, r: number) => {
+      let res = 1n;
+      let base = BigInt(n);
+      let exp = BigInt(r);
+      const mod = 1000000007n;
+      while (exp > 0n) {
+        if (exp % 2n === 1n) res = (res * base) % mod;
+        base = (base * base) % mod;
+        exp /= 2n;
+      }
+      return Number(res);
+    },
+    sourceAttribution: 'GeeksforGeeks Power of Numbers',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/power-of-numbers-1587115620/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'gcd': () => ({
@@ -194,7 +259,7 @@ The greatest common divisor of two integers is the largest positive integer that
       'Time Complexity: O(log(min(A, B)))',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(a, b):
+    starterCode: `def solve(a: int, b: int) -> int:
     # Euclidean Algorithm
     while b:
         a, b = b, a % b
@@ -212,6 +277,19 @@ print("GCD(12, 18):", solve(12, 18))
       approach: 'Apply Euclidean Algorithm: `gcd(a, b) = gcd(b, a % b)` until `b == 0`.',
       complexity: 'Time: O(log(min(A, B))) | Space: O(1)',
     },
+    referenceImplementation: (a: number, b: number) => {
+      while (b) {
+        const t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    },
+    sourceAttribution: 'GeeksforGeeks GCD Reference',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/gcd-of-two-numbers3459/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'divisors': () => ({
@@ -226,7 +304,7 @@ print("GCD(12, 18):", solve(12, 18))
       'Time Complexity: O(sqrt(N))',
       'Auxiliary Space: O(number of divisors)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> list:
     divs = set()
     for i in range(1, int(n**0.5) + 1):
         if n % i == 0:
@@ -246,6 +324,21 @@ print("Divisors of 12:", solve(12))
       approach: 'Iterate up to `sqrt(N)`. For every factor `i`, both `i` and `n // i` are divisors.',
       complexity: 'Time: O(sqrt(N)) | Space: O(D)',
     },
+    referenceImplementation: (n: number) => {
+      const divs = new Set<number>();
+      for (let i = 1; i * i <= n; i++) {
+        if (n % i === 0) {
+          divs.add(i);
+          divs.add(n / i);
+        }
+      }
+      return Array.from(divs).sort((a, b) => a - b);
+    },
+    sourceAttribution: 'GeeksforGeeks All Divisors of a Number',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/all-divisors-of-a-number/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'prime': () => ({
@@ -262,7 +355,7 @@ A prime number is a natural number strictly greater than 1 that has no positive 
       'Time Complexity: O(sqrt(N))',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> bool:
     if n <= 1:
         return False
     for i in range(2, int(n**0.5) + 1):
@@ -282,6 +375,18 @@ print("Is 11 prime?:", solve(11))
       approach: 'Check divisibility from 2 up to `floor(sqrt(n))`. If no factor divides evenly, `n` is prime.',
       complexity: 'Time: O(sqrt(N)) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => {
+      if (n <= 1) return false;
+      for (let i = 2; i * i <= n; i++) {
+        if (n % i === 0) return false;
+      }
+      return true;
+    },
+    sourceAttribution: 'GeeksforGeeks Prime Number Verification',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/prime-number2314/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'armstrong': () => ({
@@ -298,7 +403,7 @@ Given a number \`n\`, return \`True\` if it is an Armstrong number, otherwise re
       'Time Complexity: O(1)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> bool:
     digits = [int(d) for d in str(n)]
     return sum(d**3 for d in digits) == n
 
@@ -314,6 +419,15 @@ print("Is 153 Armstrong?:", solve(153))
       approach: 'Extract the individual digits, compute their cubes, and verify equality with the original integer.',
       complexity: 'Time: O(1) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => {
+      const digits = n.toString().split('').map(Number);
+      return digits.reduce((sum, d) => sum + d ** 3, 0) === n;
+    },
+    sourceAttribution: 'GeeksforGeeks Armstrong Numbers',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/armstrong-numbers2727/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'palindrome_number': () => ({
@@ -330,7 +444,7 @@ An integer is a palindrome when it reads the same backward as forward. Negative 
       'Time Complexity: O(log10(N))',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> bool:
     if n < 0:
         return False
     s = str(n)
@@ -348,6 +462,16 @@ print("Is 121 palindrome?:", solve(121))
       approach: 'Negative numbers are immediately false. For non-negative integers, reverse the digits or compare string representations.',
       complexity: 'Time: O(log10 N) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => {
+      if (n < 0) return false;
+      const s = n.toString();
+      return s === s.split('').reverse().join('');
+    },
+    sourceAttribution: 'LeetCode #9 (Palindrome Number)',
+    sourceUrl: 'https://leetcode.com/problems/palindrome-number/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'square_root': () => ({
@@ -364,7 +488,7 @@ Do not use built-in fractional power functions. Solve using Binary Search.`,
       'Time Complexity: O(log N)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> int:
     if n < 2:
         return n
     left, right = 1, n // 2
@@ -390,6 +514,12 @@ print("Square root of 8:", solve(8))
       approach: 'Binary search over the range [1, n // 2] finding the largest integer whose square <= n.',
       complexity: 'Time: O(log N) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => Math.floor(Math.sqrt(n)),
+    sourceAttribution: 'LeetCode #69 (Sqrt(x))',
+    sourceUrl: 'https://leetcode.com/problems/sqrtx/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'perfect_number': () => ({
@@ -406,7 +536,7 @@ Given an integer \`n\`, return \`True\` if \`n\` is a perfect number, otherwise 
       'Time Complexity: O(sqrt(N))',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(n):
+    starterCode: `def solve(n: int) -> bool:
     if n <= 1:
         return False
     total = 1
@@ -429,6 +559,22 @@ print("Is 28 perfect?:", solve(28))
       approach: 'Iterate from 2 up to sqrt(N) to sum paired divisors, comparing the total with N.',
       complexity: 'Time: O(sqrt(N)) | Space: O(1)',
     },
+    referenceImplementation: (n: number) => {
+      if (n <= 1) return false;
+      let sum = 1;
+      for (let i = 2; i * i <= n; i++) {
+        if (n % i === 0) {
+          sum += i;
+          if (i !== n / i) sum += n / i;
+        }
+      }
+      return sum === n;
+    },
+    sourceAttribution: 'LeetCode #507 (Perfect Number)',
+    sourceUrl: 'https://leetcode.com/problems/perfect-number/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'min_max_array': () => ({
@@ -444,7 +590,7 @@ print("Is 28 perfect?:", solve(28))
       'Time Complexity: O(N)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(nums):
+    starterCode: `def solve(nums: list) -> list:
     # Single pass min/max extraction
     return [min(nums), max(nums)]
 
@@ -460,6 +606,12 @@ print("Min and Max:", solve([3, 2, 1, 56, 1000, 167]))
       approach: 'Linear scan tracking current minimum and maximum values with 2*(N-1) comparisons.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (nums: number[]) => [Math.min(...nums), Math.max(...nums)],
+    sourceAttribution: 'GeeksforGeeks Min and Max in Array',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/find-minimum-and-maximum-element-in-an-array4428/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'third_largest': () => ({
@@ -474,7 +626,7 @@ print("Min and Max:", solve([3, 2, 1, 56, 1000, 167]))
       '-10^9 <= nums[i] <= 10^9',
       'Time Complexity: O(N)',
     ],
-    starterCode: `def solve(nums):
+    starterCode: `def solve(nums: list) -> int:
     unique = sorted(list(set(nums)), reverse=True)
     return unique[2] if len(unique) >= 3 else unique[0]
 
@@ -490,6 +642,15 @@ print("Third largest:", solve([2, 4, 1, 3, 5]))
       approach: 'Track three variables (first, second, third) in a single linear pass or use min-heap.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (nums: number[]) => {
+      const u = Array.from(new Set(nums)).sort((a, b) => b - a);
+      return u.length >= 3 ? u[2] : u[0];
+    },
+    sourceAttribution: 'GeeksforGeeks Third Largest Element',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/third-largest-element/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'search_element': () => ({
@@ -504,7 +665,7 @@ print("Third largest:", solve([2, 4, 1, 3, 5]))
       '-10^9 <= nums[i], k <= 10^9',
       'Time Complexity: O(N)',
     ],
-    starterCode: `def solve(nums, k):
+    starterCode: `def solve(nums: list, k: int) -> int:
     return nums.index(k) if k in nums else -1
 
 # Local test:
@@ -519,6 +680,12 @@ print("Search index:", solve([1, 2, 3, 4], 3))
       approach: 'Linear search scanning elements sequentially from index 0 to N-1.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (nums: number[], k: number) => nums.indexOf(k),
+    sourceAttribution: 'GeeksforGeeks Linear Search in Array',
+    sourceUrl: 'https://www.geeksforgeeks.org/problems/search-an-element-in-an-array-1587115621/1',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'missing_number': () => ({
@@ -534,7 +701,7 @@ print("Search index:", solve([1, 2, 3, 4], 3))
       '0 <= nums[i] <= n',
       'All elements are unique',
     ],
-    starterCode: `def solve(nums):
+    starterCode: `def solve(nums: list) -> int:
     n = len(nums)
     expected_sum = (n * (n + 1)) // 2
     return expected_sum - sum(nums)
@@ -551,6 +718,16 @@ print("Missing number:", solve([3, 0, 1]))
       approach: 'Gaussian summation `n*(n+1)//2` minus `sum(nums)` gives the missing value in O(N) time and O(1) space.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (nums: number[]) => {
+      const n = nums.length;
+      const expected = (n * (n + 1)) / 2;
+      return expected - nums.reduce((a, b) => a + b, 0);
+    },
+    sourceAttribution: 'LeetCode #268 (Missing Number)',
+    sourceUrl: 'https://leetcode.com/problems/missing-number/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'sort_012': () => ({
@@ -569,7 +746,7 @@ Solve this in a single pass using the **Dutch National Flag algorithm** without 
       'Time Complexity: O(N)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(nums):
+    starterCode: `def solve(nums: list) -> list:
     # Dutch National Flag 3-pointer partition
     low, mid, high = 0, 0, len(nums) - 1
     while mid <= high:
@@ -596,6 +773,12 @@ print("Sorted 0, 1, 2:", solve([2, 0, 2, 1, 1, 0]))
       approach: 'Three pointers: `low` bounds the 0s, `high` bounds the 2s, and `mid` iterates and swaps into place in O(N) single pass.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (nums: number[]) => [...nums].sort((a, b) => a - b),
+    sourceAttribution: 'LeetCode #75 (Sort Colors)',
+    sourceUrl: 'https://leetcode.com/problems/sort-colors/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'parentheses_min_add': () => ({
@@ -618,8 +801,7 @@ Return the minimum number of moves required to make \`s\` valid.`,
       'Time Complexity: O(N)',
       'Auxiliary Space: O(1)',
     ],
-    starterCode: `def solve(s):
-    # Track unmatched parentheses
+    starterCode: `def solve(s: str) -> int:
     open_needed = 0
     close_needed = 0
     for char in s:
@@ -643,6 +825,21 @@ print("Min add for '())':", solve("())"))
       approach: 'Maintain a balance counter of open parentheses. Increment when finding `(`, decrement when matching `)`. Unmatched `)` increment required additions.',
       complexity: 'Time: O(N) | Space: O(1)',
     },
+    referenceImplementation: (s: string) => {
+      let open = 0;
+      let close = 0;
+      for (const char of s) {
+        if (char === '(') close++;
+        else if (close > 0) close--;
+        else open++;
+      }
+      return open + close;
+    },
+    sourceAttribution: 'LeetCode #921 (Minimum Add to Make Parentheses Valid)',
+    sourceUrl: 'https://leetcode.com/problems/minimum-add-to-make-parentheses-valid/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'two_sum': () => ({
@@ -660,7 +857,7 @@ You may assume that each input would have exactly one solution, and you may not 
       '-10^9 <= target <= 10^9',
       'Only one valid answer exists',
     ],
-    starterCode: `def solve(nums, target):
+    starterCode: `def solve(nums: list, target: int) -> list:
     # Single-pass Hash Map
     seen = {}
     for i, num in enumerate(nums):
@@ -682,6 +879,20 @@ print("Two Sum Result:", solve([2, 7, 11, 15], 9))
       approach: 'Hash map stores elements and indices in a single pass. Complement check runs in O(1) amortized time.',
       complexity: 'Time: O(N) | Space: O(N)',
     },
+    referenceImplementation: (nums: number[], target: number) => {
+      const map = new Map<number, number>();
+      for (let i = 0; i < nums.length; i++) {
+        const diff = target - nums[i];
+        if (map.has(diff)) return [map.get(diff)!, i];
+        map.set(nums[i], i);
+      }
+      return [];
+    },
+    sourceAttribution: 'LeetCode #1 (Two Sum)',
+    sourceUrl: 'https://leetcode.com/problems/two-sum/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 
   'three_sum': () => ({
@@ -697,7 +908,7 @@ Notice that the solution set must not contain duplicate triplets.`,
       '3 <= nums.length <= 3000',
       '-10^5 <= nums[i] <= 10^5',
     ],
-    starterCode: `def solve(nums):
+    starterCode: `def solve(nums: list) -> list:
     nums.sort()
     res = []
     for i in range(len(nums) - 2):
@@ -732,19 +943,473 @@ print("3Sum:", solve([-1, 0, 1, 2, -1, -4]))
       approach: 'Sort the array first. Fix one element and use a two-pointer scan for the other two, skipping identical elements to prevent duplicates.',
       complexity: 'Time: O(N^2) | Space: O(1) extra',
     },
+    referenceImplementation: (nums: number[]) => {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const res: number[][] = [];
+      for (let i = 0; i < sorted.length - 2; i++) {
+        if (i > 0 && sorted[i] === sorted[i - 1]) continue;
+        let l = i + 1;
+        let r = sorted.length - 1;
+        while (l < r) {
+          const s = sorted[i] + sorted[l] + sorted[r];
+          if (s < 0) l++;
+          else if (s > 0) r--;
+          else {
+            res.push([sorted[i], sorted[l], sorted[r]]);
+            while (l < r && sorted[l] === sorted[l + 1]) l++;
+            while (l < r && sorted[r] === sorted[r - 1]) r--;
+            l++;
+            r--;
+          }
+        }
+      }
+      return res;
+    },
+    sourceAttribution: 'LeetCode #15 (3Sum)',
+    sourceUrl: 'https://leetcode.com/problems/3sum/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  // Problem ID 414: Correct authentic math challenge
+  'average_of_divisible_numbers': () => ({
+    description: `Given three positive integers \`k\`, \`start\`, and \`end\`, calculate and return the arithmetic average (mean) of all integers in the inclusive range \`[start, end]\` that are divisible by \`k\`.
+
+If no numbers in the range are divisible by \`k\`, return \`0.0\`.`,
+    examples: [
+      { input: 'k = 6, start = 6, end = 50', output: '27.0', explanation: 'Numbers divisible by 6 between 6 and 50 are: 6, 12, 18, 24, 30, 36, 42, 48. Sum = 216, Count = 8. Average = 216/8 = 27.0.' },
+      { input: 'k = 5, start = 10, end = 25', output: '17.5', explanation: 'Numbers are: 10, 15, 20, 25. Sum = 70, Count = 4. Average = 70/4 = 17.5.' },
+      { input: 'k = 7, start = 1, end = 6', output: '0.0', explanation: 'No numbers in [1, 6] are divisible by 7.' },
+    ],
+    constraints: [
+      '1 <= k <= 10^5',
+      '1 <= start <= end <= 10^6',
+      'Result is formatted as floating point arithmetic mean',
+      'Time Complexity: O((end - start) / k)',
+      'Auxiliary Space: O(1)',
+    ],
+    starterCode: `def solve(k: int, start: int, end: int) -> float:
+    # Find arithmetic average of all multiples of k in [start, end]
+    multiples = [x for x in range(start, end + 1) if x % k == 0]
+    return float(sum(multiples) / len(multiples)) if multiples else 0.0
+
+# Local test:
+print("Average divisible by 6 in [6, 50]:", solve(6, 6, 50))
+`,
+    testCases: [
+      { input: '(6, 6, 50)', expected: '27', explanation: 'Average of multiples of 6 between 6 and 50' },
+      { input: '(5, 10, 25)', expected: '17.5', explanation: 'Average of 10, 15, 20, 25' },
+      { input: '(7, 1, 6)', expected: '0', explanation: 'No multiples in range' },
+      { input: '(4, 4, 4)', expected: '4', explanation: 'Single element range' },
+    ],
+    editorial: {
+      approach: 'Identify all integers x in [start, end] where x % k == 0. Compute the arithmetic mean as sum(multiples) / count(multiples).',
+      complexity: 'Time: O((end - start) / k) | Space: O(1)',
+    },
+    referenceImplementation: (k: number, start: number, end: number) => {
+      const multiples: number[] = [];
+      for (let x = start; x <= end; x++) {
+        if (x % k === 0) multiples.push(x);
+      }
+      return multiples.length ? multiples.reduce((a, b) => a + b, 0) / multiples.length : 0;
+    },
+    sourceAttribution: 'Ap Workspace Aptitude Cheatsheet (Authored Math Challenge)',
+    sourceUrl: 'https://youtu.be/rhSxQ4ieAYc?si=UTkOg0zYu2ooT5Gx',
+    isApAuthored: true,
+    isCanonicalVerified: true,
+    verificationStatus: 'verified',
+  }),
+
+  'valid_parentheses': () => ({
+    description: `Given a string \`s\` containing just the characters \`'('\`, \`')'\`, \`'{'\`, \`'}'\`, \`'['\` and \`']'\`, determine if the input string is valid.
+
+An input string is valid if:
+1. Open brackets must be closed by the same type of brackets.
+2. Open brackets must be closed in the correct order.
+3. Every close bracket has a corresponding open bracket of the same type.`,
+    examples: [
+      { input: 's = "()"', output: 'True', explanation: 'Parentheses match cleanly.' },
+      { input: 's = "()[]{}"', output: 'True', explanation: 'All bracket pairs match in valid sequential order.' },
+      { input: 's = "(]"', output: 'False', explanation: 'Mismatched closing bracket type.' },
+    ],
+    constraints: [
+      '1 <= s.length <= 10^4',
+      's consists of parentheses only: ()[]{}',
+      'Time Complexity: O(N)',
+      'Auxiliary Space: O(N)',
+    ],
+    starterCode: `def solve(s: str) -> bool:
+    stack = []
+    mapping = {')': '(', '}': '{', ']': '['}
+    for char in s:
+        if char in mapping:
+            top = stack.pop() if stack else '#'
+            if mapping[char] != top:
+                return False
+        else:
+            stack.append(char)
+    return not stack
+
+# Local test:
+print("Is '()[]{}' valid?:", solve("()[]{}"))
+`,
+    testCases: [
+      { input: '("()")', expected: 'True', explanation: 'Single pair' },
+      { input: '("()[]{}")', expected: 'True', explanation: 'Multiple pairs' },
+      { input: '("(]")', expected: 'False', explanation: 'Mismatched brackets' },
+      { input: '("([)]")', expected: 'False', explanation: 'Interleaved invalid nesting' },
+    ],
+    editorial: {
+      approach: 'Use a LIFO stack. Push opening brackets; when encountering a closing bracket, pop and verify type match.',
+      complexity: 'Time: O(N) | Space: O(N)',
+    },
+    referenceImplementation: (s: string) => {
+      const stack: string[] = [];
+      const map: Record<string, string> = { ')': '(', '}': '{', ']': '[' };
+      for (const ch of s) {
+        if (ch in map) {
+          const top = stack.pop() || '#';
+          if (map[ch] !== top) return false;
+        } else {
+          stack.push(ch);
+        }
+      }
+      return stack.length === 0;
+    },
+    sourceAttribution: 'LeetCode #20 (Valid Parentheses)',
+    sourceUrl: 'https://leetcode.com/problems/valid-parentheses/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'binary_search': () => ({
+    description: `Given an array of integers \`nums\` which is sorted in ascending order, and an integer \`target\`, write a function to search \`target\` in \`nums\`. If \`target\` exists, then return its index. Otherwise, return \`-1\`.
+
+You must write an algorithm with \`O(log n)\` runtime complexity.`,
+    examples: [
+      { input: 'nums = [-1, 0, 3, 5, 9, 12], target = 9', output: '4', explanation: '9 exists in nums and its index is 4.' },
+      { input: 'nums = [-1, 0, 3, 5, 9, 12], target = 2', output: '-1', explanation: '2 does not exist in nums so return -1.' },
+    ],
+    constraints: [
+      '1 <= nums.length <= 10^4',
+      '-10^4 < nums[i], target < 10^4',
+      'All the integers in nums are unique',
+      'nums is sorted in ascending order',
+    ],
+    starterCode: `def solve(nums: list, target: int) -> int:
+    left, right = 0, len(nums) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if nums[mid] == target:
+            return mid
+        elif nums[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1
+
+# Local test:
+print("Binary search for 9:", solve([-1, 0, 3, 5, 9, 12], 9))
+`,
+    testCases: [
+      { input: '([-1, 0, 3, 5, 9, 12], 9)', expected: '4', explanation: 'Found at index 4' },
+      { input: '([-1, 0, 3, 5, 9, 12], 2)', expected: '-1', explanation: 'Not found' },
+      { input: '([5], 5)', expected: '0', explanation: 'Single element match' },
+    ],
+    editorial: {
+      approach: 'Classic binary search repeatedly halving search intervals.',
+      complexity: 'Time: O(log N) | Space: O(1)',
+    },
+    referenceImplementation: (nums: number[], target: number) => {
+      let l = 0, r = nums.length - 1;
+      while (l <= r) {
+        const mid = Math.floor((l + r) / 2);
+        if (nums[mid] === target) return mid;
+        if (nums[mid] < target) l = mid + 1;
+        else r = mid - 1;
+      }
+      return -1;
+    },
+    sourceAttribution: 'LeetCode #704 (Binary Search)',
+    sourceUrl: 'https://leetcode.com/problems/binary-search/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'maximum_subarray': () => ({
+    description: `Given an integer array \`nums\`, find the subarray with the largest sum, and return its sum.`,
+    examples: [
+      { input: 'nums = [-2, 1, -3, 4, -1, 2, 1, -5, 4]', output: '6', explanation: 'The subarray [4, -1, 2, 1] has the largest sum 6.' },
+      { input: 'nums = [1]', output: '1', explanation: 'The subarray [1] has the largest sum 1.' },
+      { input: 'nums = [5, 4, -1, 7, 8]', output: '23', explanation: 'The subarray [5, 4, -1, 7, 8] has the largest sum 23.' },
+    ],
+    constraints: [
+      '1 <= nums.length <= 10^5',
+      '-10^4 <= nums[i] <= 10^4',
+    ],
+    starterCode: `def solve(nums: list) -> int:
+    # Kadane's Algorithm
+    max_so_far = nums[0]
+    curr_max = nums[0]
+    for x in nums[1:]:
+        curr_max = max(x, curr_max + x)
+        max_so_far = max(max_so_far, curr_max)
+    return max_so_far
+
+# Local test:
+print("Max Subarray:", solve([-2, 1, -3, 4, -1, 2, 1, -5, 4]))
+`,
+    testCases: [
+      { input: '([-2, 1, -3, 4, -1, 2, 1, -5, 4])', expected: '6', explanation: 'Kadane result is 6' },
+      { input: '([1])', expected: '1', explanation: 'Single element' },
+      { input: '([5, 4, -1, 7, 8])', expected: '23', explanation: 'All positive elements sum' },
+    ],
+    editorial: {
+      approach: "Kadane's algorithm maintains the maximum subarray sum ending at each position.",
+      complexity: 'Time: O(N) | Space: O(1)',
+    },
+    referenceImplementation: (nums: number[]) => {
+      let maxSoFar = nums[0];
+      let curr = nums[0];
+      for (let i = 1; i < nums.length; i++) {
+        curr = Math.max(nums[i], curr + nums[i]);
+        maxSoFar = Math.max(maxSoFar, curr);
+      }
+      return maxSoFar;
+    },
+    sourceAttribution: 'LeetCode #53 (Maximum Subarray)',
+    sourceUrl: 'https://leetcode.com/problems/maximum-subarray/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'contains_duplicate': () => ({
+    description: `Given an integer array \`nums\`, return \`True\` if any value appears **at least twice** in the array, and return \`False\` if every element is distinct.`,
+    examples: [
+      { input: 'nums = [1, 2, 3, 1]', output: 'True', explanation: '1 appears at index 0 and 3.' },
+      { input: 'nums = [1, 2, 3, 4]', output: 'False', explanation: 'All elements are distinct.' },
+      { input: 'nums = [1, 1, 1, 3, 3, 4, 3, 2, 4, 2]', output: 'True', explanation: 'Multiple duplicates exist.' },
+    ],
+    constraints: [
+      '1 <= nums.length <= 10^5',
+      '-10^9 <= nums[i] <= 10^9',
+    ],
+    starterCode: `def solve(nums: list) -> bool:
+    return len(nums) != len(set(nums))
+
+# Local test:
+print("Contains duplicate:", solve([1, 2, 3, 1]))
+`,
+    testCases: [
+      { input: '([1, 2, 3, 1])', expected: 'True', explanation: 'Duplicate 1' },
+      { input: '([1, 2, 3, 4])', expected: 'False', explanation: 'All distinct' },
+      { input: '([1, 1, 1])', expected: 'True', explanation: 'Identical elements' },
+    ],
+    editorial: {
+      approach: 'Hash set tracking or comparing `len(nums) != len(set(nums))`.',
+      complexity: 'Time: O(N) | Space: O(N)',
+    },
+    referenceImplementation: (nums: number[]) => new Set(nums).size !== nums.length,
+    sourceAttribution: 'LeetCode #217 (Contains Duplicate)',
+    sourceUrl: 'https://leetcode.com/problems/contains-duplicate/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'best_time_to_buy_and_sell_stock': () => ({
+    description: `You are given an array \`prices\` where \`prices[i]\` is the price of a given stock on the \`i\`th day.
+
+You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock.
+
+Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return \`0\`.`,
+    examples: [
+      { input: 'prices = [7, 1, 5, 3, 6, 4]', output: '5', explanation: 'Buy on day 2 (price = 1) and sell on day 5 (price = 6), profit = 6 - 1 = 5.' },
+      { input: 'prices = [7, 6, 4, 3, 1]', output: '0', explanation: 'In this case, no transactions are done and max profit = 0.' },
+    ],
+    constraints: [
+      '1 <= prices.length <= 10^5',
+      '0 <= prices[i] <= 10^4',
+    ],
+    starterCode: `def solve(prices: list) -> int:
+    min_price = float('inf')
+    max_profit = 0
+    for price in prices:
+        if price < min_price:
+            min_price = price
+        elif price - min_price > max_profit:
+            max_profit = price - min_price
+    return max_profit
+
+# Local test:
+print("Max Stock Profit:", solve([7, 1, 5, 3, 6, 4]))
+`,
+    testCases: [
+      { input: '([7, 1, 5, 3, 6, 4])', expected: '5', explanation: 'Buy at 1, sell at 6' },
+      { input: '([7, 6, 4, 3, 1])', expected: '0', explanation: 'Monotonically decreasing' },
+      { input: '([2, 4, 1])', expected: '2', explanation: 'Buy at 2, sell at 4' },
+    ],
+    editorial: {
+      approach: 'Single pass tracking minimum buying price seen so far and maximum prospective difference.',
+      complexity: 'Time: O(N) | Space: O(1)',
+    },
+    referenceImplementation: (prices: number[]) => {
+      let minP = Infinity;
+      let maxP = 0;
+      for (const p of prices) {
+        if (p < minP) minP = p;
+        else if (p - minP > maxP) maxP = p - minP;
+      }
+      return maxP;
+    },
+    sourceAttribution: 'LeetCode #121 (Best Time to Buy and Sell Stock)',
+    sourceUrl: 'https://leetcode.com/problems/best-time-to-buy-and-sell-stock/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'climbing_stairs': () => ({
+    description: `You are climbing a staircase. It takes \`n\` steps to reach the top.
+
+Each time you can either climb \`1\` or \`2\` steps. In how many distinct ways can you climb to the top?`,
+    examples: [
+      { input: 'n = 2', output: '2', explanation: 'There are two ways: (1+1) and (2).' },
+      { input: 'n = 3', output: '3', explanation: 'There are three ways: (1+1+1), (1+2), and (2+1).' },
+    ],
+    constraints: [
+      '1 <= n <= 45',
+    ],
+    starterCode: `def solve(n: int) -> int:
+    if n <= 2:
+        return n
+    a, b = 1, 2
+    for _ in range(3, n + 1):
+        a, b = b, a + b
+    return b
+
+# Local test:
+print("Climbing stairs for n=3:", solve(3))
+`,
+    testCases: [
+      { input: '(2)', expected: '2', explanation: '2 steps' },
+      { input: '(3)', expected: '3', explanation: '3 steps' },
+      { input: '(5)', expected: '8', explanation: '5 steps' },
+    ],
+    editorial: {
+      approach: 'Fibonacci recurrence: `ways(n) = ways(n-1) + ways(n-2)`.',
+      complexity: 'Time: O(N) | Space: O(1)',
+    },
+    referenceImplementation: (n: number) => {
+      if (n <= 2) return n;
+      let a = 1, b = 2;
+      for (let i = 3; i <= n; i++) {
+        const next = a + b;
+        a = b;
+        b = next;
+      }
+      return b;
+    },
+    sourceAttribution: 'LeetCode #70 (Climbing Stairs)',
+    sourceUrl: 'https://leetcode.com/problems/climbing-stairs/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'single_number': () => ({
+    description: `Given a **non-empty** array of integers \`nums\`, every element appears twice except for one. Find that single one.
+
+You must implement a solution with a linear runtime complexity and use only constant extra space.`,
+    examples: [
+      { input: 'nums = [2, 2, 1]', output: '1', explanation: '1 appears once.' },
+      { input: 'nums = [4, 1, 2, 1, 2]', output: '4', explanation: '4 appears once.' },
+      { input: 'nums = [1]', output: '1', explanation: 'Single element.' },
+    ],
+    constraints: [
+      '1 <= nums.length <= 3 * 10^4',
+      '-3 * 10^4 <= nums[i] <= 3 * 10^4',
+      'Each element in the array appears twice except for one element which appears only once',
+    ],
+    starterCode: `def solve(nums: list) -> int:
+    res = 0
+    for x in nums:
+        res ^= x
+    return res
+
+# Local test:
+print("Single Number:", solve([4, 1, 2, 1, 2]))
+`,
+    testCases: [
+      { input: '([2, 2, 1])', expected: '1', explanation: '1 is unique' },
+      { input: '([4, 1, 2, 1, 2])', expected: '4', explanation: '4 is unique' },
+      { input: '([1])', expected: '1', explanation: 'Single element array' },
+    ],
+    editorial: {
+      approach: 'Bitwise XOR operation cancels duplicate numbers because `x ^ x = 0` and `0 ^ x = x`.',
+      complexity: 'Time: O(N) | Space: O(1)',
+    },
+    referenceImplementation: (nums: number[]) => nums.reduce((acc, x) => acc ^ x, 0),
+    sourceAttribution: 'LeetCode #136 (Single Number)',
+    sourceUrl: 'https://leetcode.com/problems/single-number/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
+  }),
+
+  'valid_palindrome': () => ({
+    description: `A phrase is a **palindrome** if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward. Alphanumeric characters include letters and numbers.
+
+Given a string \`s\`, return \`True\` if it is a palindrome, or \`False\` otherwise.`,
+    examples: [
+      { input: 's = "A man, a plan, a canal: Panama"', output: 'True', explanation: '"amanaplanacanalpanama" is a palindrome.' },
+      { input: 's = "race a car"', output: 'False', explanation: '"raceacar" is not a palindrome.' },
+      { input: 's = " "', output: 'True', explanation: 'Empty string after removing non-alphanumeric characters reads same forward and backward.' },
+    ],
+    constraints: [
+      '1 <= s.length <= 2 * 10^5',
+      's consists only of printable ASCII characters',
+    ],
+    starterCode: `def solve(s: str) -> bool:
+    filtered = ''.join(c.lower() for c in s if c.isalnum())
+    return filtered == filtered[::-1]
+
+# Local test:
+print("Is palindrome?:", solve("A man, a plan, a canal: Panama"))
+`,
+    testCases: [
+      { input: '("A man, a plan, a canal: Panama")', expected: 'True', explanation: 'Panama palindrome' },
+      { input: '("race a car")', expected: 'False', explanation: 'Not a palindrome' },
+      { input: '(" ")', expected: 'True', explanation: 'Empty after filter' },
+    ],
+    editorial: {
+      approach: 'Filter to alphanumeric characters, convert to lowercase, and check two-pointer equality from outside in.',
+      complexity: 'Time: O(N) | Space: O(1) or O(N)',
+    },
+    referenceImplementation: (s: string) => {
+      const filtered = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return filtered === filtered.split('').reverse().join('');
+    },
+    sourceAttribution: 'LeetCode #125 (Valid Palindrome)',
+    sourceUrl: 'https://leetcode.com/problems/valid-palindrome/',
+    isCanonicalVerified: true,
+    isApAuthored: false,
+    verificationStatus: 'verified',
   }),
 };
 
 // -------------------------------------------------------------
-// Intelligent Synthesis Engine for Any DSA Problem
+// Authentic Problem Detail Resolver
 // -------------------------------------------------------------
 export function getProblemDetails(q: Question): ProblemDetail {
   const title = (q.title || '').trim();
   const titleLower = title.toLowerCase();
-  const patternLower = (q.pattern_name || '').toLowerCase();
-  const subtopicLower = (q.subtopic_name || '').toLowerCase();
 
-  // 1. Exact preset lookups
+  // 1. Exact canonical preset lookups
   if (titleLower.includes('even or odd') || titleLower.includes('odd or even')) {
     return canonicalPresets['even_or_odd'](q);
   }
@@ -754,10 +1419,10 @@ export function getProblemDetails(q: Question): ProblemDetail {
   if (titleLower.includes('count digit')) {
     return canonicalPresets['count_digits'](q);
   }
-  if (titleLower.includes('reverse a number') || titleLower.includes('reverse digit')) {
+  if (titleLower.includes('reverse a number') || titleLower.includes('reverse digit') || titleLower === 'reverse integer') {
     return canonicalPresets['reverse_number'](q);
   }
-  if (titleLower.includes('power of a number')) {
+  if (titleLower.includes('power of a number') || titleLower.includes('power of numbers')) {
     return canonicalPresets['power_number'](q);
   }
   if (titleLower.includes('gcd') || titleLower.includes('greatest common divisor')) {
@@ -775,7 +1440,7 @@ export function getProblemDetails(q: Question): ProblemDetail {
   if (titleLower.includes('check palindrome of number') || titleLower.includes('palindrome number')) {
     return canonicalPresets['palindrome_number'](q);
   }
-  if (titleLower.includes('square root')) {
+  if (titleLower.includes('square root') || titleLower === 'sqrt(x)') {
     return canonicalPresets['square_root'](q);
   }
   if (titleLower.includes('perfect number')) {
@@ -793,290 +1458,122 @@ export function getProblemDetails(q: Question): ProblemDetail {
   if (titleLower.includes('missing number')) {
     return canonicalPresets['missing_number'](q);
   }
-  if (titleLower.includes('sort an array of 0s') || titleLower.includes('0s , 1s and 2s')) {
+  if (titleLower.includes('sort an array of 0s') || titleLower.includes('0s , 1s and 2s') || titleLower.includes('sort colors')) {
     return canonicalPresets['sort_012'](q);
   }
-  if (titleLower.includes('parenthes') || titleLower.includes('minimum add')) {
+  if (titleLower.includes('minimum add to make parentheses valid') || titleLower.includes('minimum add')) {
     return canonicalPresets['parentheses_min_add'](q);
   }
   if (titleLower.includes('two sum') || titleLower.includes('pair with given sum') || titleLower.includes('key pair')) {
     return canonicalPresets['two_sum'](q);
   }
-  if (titleLower.includes('3 sum') || titleLower.includes('triplet sum')) {
+  if (titleLower.includes('3 sum') || titleLower.includes('triplet sum') || titleLower === '3sum') {
     return canonicalPresets['three_sum'](q);
   }
-
-  // 2. High-Fidelity Domain Synthesis Engine
-  // Synthesizes concrete descriptions, real inputs, realistic constraints, and starter code based on DSA topic semantics.
-
-  // Arrays & Lists
-  if (patternLower.includes('array') || subtopicLower.includes('array')) {
-    return {
-      description: `Given an integer array \`nums\` of size \`n\`, solve the problem **${title}**. 
-
-Ensure optimal space and time complexity targets are met, handling edge cases such as empty lists, negative integers, and duplicate elements.`,
-      examples: [
-        { input: 'nums = [1, 2, 3, 4, 5]', output: '[5, 4, 3, 2, 1]', explanation: `Standard array transformation for ${title}.` },
-        { input: 'nums = [10, 20, 10]', output: '[20]', explanation: 'Evaluated with duplicate and distinct elements.' },
-        { input: 'nums = [7]', output: '[7]', explanation: 'Single element base case.' },
-      ],
-      constraints: [
-        '1 <= nums.length <= 10^5',
-        '-10^9 <= nums[i] <= 10^9',
-        `Difficulty tier: ${q.difficulty}`,
-      ],
-      starterCode: `def solve(nums):
-    """
-    ${title}
-    Pattern: ${q.pattern_name || 'Array'}
-    Difficulty: ${q.difficulty}
-    """
-    # Write your optimal Python solution:
-    return nums
-
-# Test execution:
-print("Result:", solve([1, 2, 3, 4, 5]))
-`,
-      testCases: [
-        { input: '([1, 2, 3, 4, 5])', expected: '[1, 2, 3, 4, 5]', explanation: 'Standard evaluation' },
-        { input: '([10, 20, 10])', expected: '[10, 20, 10]', explanation: 'Duplicate handling' },
-        { input: '([7])', expected: '[7]', explanation: 'Single item array' },
-      ],
-      editorial: {
-        approach: `Apply ${q.pattern_name || 'Array'} principles: linear scan, two pointers, or prefix caching.`,
-        complexity: 'Time: O(N) | Space: O(1) to O(N)',
-      },
-    };
+  if (titleLower.includes('average of divisible') || titleLower.includes('average of numbers divisible')) {
+    return canonicalPresets['average_of_divisible_numbers'](q);
+  }
+  if (titleLower === 'valid parentheses' || titleLower.includes('valid parentheses')) {
+    return canonicalPresets['valid_parentheses'](q);
+  }
+  if (titleLower === 'binary search' || titleLower.includes('binary search')) {
+    return canonicalPresets['binary_search'](q);
+  }
+  if (titleLower === 'maximum subarray' || titleLower.includes('maximum subarray')) {
+    return canonicalPresets['maximum_subarray'](q);
+  }
+  if (titleLower === 'contains duplicate' || titleLower.includes('contains duplicate')) {
+    return canonicalPresets['contains_duplicate'](q);
+  }
+  if (titleLower.includes('best time to buy and sell stock')) {
+    return canonicalPresets['best_time_to_buy_and_sell_stock'](q);
+  }
+  if (titleLower === 'climbing stairs' || titleLower.includes('climbing stairs')) {
+    return canonicalPresets['climbing_stairs'](q);
+  }
+  if (titleLower === 'single number' || titleLower.includes('single number')) {
+    return canonicalPresets['single_number'](q);
+  }
+  if (titleLower === 'valid palindrome' || titleLower.includes('valid palindrome')) {
+    return canonicalPresets['valid_palindrome'](q);
   }
 
-  // Strings
-  if (patternLower.includes('string') || subtopicLower.includes('string')) {
-    return {
-      description: `Given a string \`s\`, implement an optimal algorithm to solve **${title}**.
+  // 2. Authentic Fallback for Non-Canonical Problems
+  // CRITICAL: NEVER invent fake examples, fake expected outputs, or dummy test cases.
+  const hasExternalLink = Boolean(q.practice_link && q.practice_link.startsWith('http'));
+  const attribution = q.platform ? `${q.platform} Problem Reference` : 'External Reference';
 
-The solution should account for ASCII character sets, case sensitivity, and boundary conditions such as empty strings.`,
-      examples: [
-        { input: 's = "leetcode"', output: 'True', explanation: `Valid evaluation for ${title}.` },
-        { input: 's = "bbbbb"', output: 'False', explanation: 'Evaluated on repeating characters.' },
-        { input: 's = ""', output: 'True', explanation: 'Empty string boundary condition.' },
-      ],
-      constraints: [
-        '1 <= s.length <= 10^5',
-        's consists of printable ASCII characters',
-      ],
-      starterCode: `def solve(s):
-    """
-    ${title}
-    Pattern: ${q.pattern_name || 'String'}
-    Difficulty: ${q.difficulty}
-    """
-    return s
-
-# Test execution:
-print("Result:", solve("leetcode"))
-`,
-      testCases: [
-        { input: '("leetcode")', expected: '"leetcode"', explanation: 'Standard word' },
-        { input: '("bbbbb")', expected: '"bbbbb"', explanation: 'Repeated characters' },
-        { input: '("")', expected: '""', explanation: 'Empty boundary case' },
-      ],
-      editorial: {
-        approach: 'Scan characters using hash map frequency counters or sliding window pointers.',
-        complexity: 'Time: O(N) | Space: O(1) or O(K)',
-      },
-    };
-  }
-
-  // Linked Lists
-  if (patternLower.includes('linked list') || subtopicLower.includes('linked list') || titleLower.includes('ll')) {
-    return {
-      description: `Given the \`head\` of a singly linked list, solve **${title}**. 
-
-Ensure pointer references are cleanly updated in-place without memory leaks or cycle invalidations.`,
-      examples: [
-        { input: 'head = [1, 2, 3, 4, 5]', output: '[5, 4, 3, 2, 1]', explanation: 'Linked list nodes processed.' },
-        { input: 'head = [1, 2]', output: '[2, 1]', explanation: 'Two-node linked list.' },
-        { input: 'head = []', output: '[]', explanation: 'Empty list edge case.' },
-      ],
-      constraints: [
-        'The number of nodes in the list is in the range [0, 5000]',
-        '-5000 <= Node.val <= 5000',
-      ],
-      starterCode: `def solve(head):
-    """
-    ${title}
-    Pattern: ${q.pattern_name || 'Linked List'}
-    Difficulty: ${q.difficulty}
-    """
-    # Write your optimal linked list pointer solution:
-    return head
-
-# Test execution:
-print("Result:", solve([1, 2, 3, 4, 5]))
-`,
-      testCases: [
-        { input: '([1, 2, 3, 4, 5])', expected: '[1, 2, 3, 4, 5]', explanation: 'Standard list' },
-        { input: '([1, 2])', expected: '[1, 2]', explanation: 'Two elements' },
-        { input: '([])', expected: '[]', explanation: 'Empty list' },
-      ],
-      editorial: {
-        approach: 'Use fast and slow pointers (Floyd\'s algorithm) or iterative previous/current pointer swapping.',
-        complexity: 'Time: O(N) | Space: O(1)',
-      },
-    };
-  }
-
-  // Trees
-  if (patternLower.includes('tree') || subtopicLower.includes('tree') || titleLower.includes('bst')) {
-    return {
-      description: `Given the \`root\` of a binary tree, solve **${title}**. 
-
-Analyze both recursive depth-first search (DFS) and iterative breadth-first search (BFS) approaches.`,
-      examples: [
-        { input: 'root = [3, 9, 20, null, null, 15, 7]', output: '3', explanation: 'Standard tree traversal.' },
-        { input: 'root = [1, null, 2]', output: '2', explanation: 'Skewed tree edge case.' },
-        { input: 'root = []', output: '0', explanation: 'Empty tree base case.' },
-      ],
-      constraints: [
-        'The number of nodes in the tree is in the range [0, 10^4]',
-        '-100 <= Node.val <= 100',
-      ],
-      starterCode: `def solve(root):
-    """
-    ${title}
-    Pattern: ${q.pattern_name || 'Binary Tree'}
-    Difficulty: ${q.difficulty}
-    """
-    return root
-
-# Test execution:
-print("Result:", solve([3, 9, 20, None, None, 15, 7]))
-`,
-      testCases: [
-        { input: '([3, 9, 20, None, None, 15, 7])', expected: '[3, 9, 20, None, None, 15, 7]', explanation: 'Balanced tree' },
-        { input: '([1, None, 2])', expected: '[1, None, 2]', explanation: 'Skewed tree' },
-        { input: '([])', expected: '[]', explanation: 'Empty tree' },
-      ],
-      editorial: {
-        approach: 'Apply Depth-First Search (inorder, preorder, postorder) or Breadth-First Search level order queue.',
-        complexity: 'Time: O(N) | Space: O(H) where H is tree height',
-      },
-    };
-  }
-
-  // Graphs
-  if (patternLower.includes('graph') || subtopicLower.includes('graph')) {
-    return {
-      description: `Given a graph represented by \`vertices\` and an adjacency list \`edges\`, implement the algorithm for **${title}**.
-
-Detect cycles, disconnected components, and verify visited state tracking.`,
-      examples: [
-        { input: 'n = 4, edges = [[0, 1], [1, 2], [2, 3]]', output: 'True', explanation: 'Acyclic connected path.' },
-        { input: 'n = 3, edges = [[0, 1], [1, 2], [2, 0]]', output: 'False', explanation: 'Cycle detected.' },
-      ],
-      constraints: [
-        '1 <= n <= 2000',
-        '0 <= edges.length <= 5000',
-      ],
-      starterCode: `def solve(n, edges):
-    """
-    ${title}
-    Pattern: ${q.pattern_name || 'Graph'}
-    Difficulty: ${q.difficulty}
-    """
-    return True
-
-# Test execution:
-print("Result:", solve(4, [[0, 1], [1, 2], [2, 3]]))
-`,
-      testCases: [
-        { input: '(4, [[0, 1], [1, 2], [2, 3]])', expected: 'True', explanation: 'Valid connected graph' },
-        { input: '(3, [[0, 1], [1, 2], [2, 0]])', expected: 'False', explanation: 'Cyclic graph' },
-      ],
-      editorial: {
-        approach: 'Use BFS with a Queue or DFS with recursion stack and visited array.',
-        complexity: 'Time: O(V + E) | Space: O(V + E)',
-      },
-    };
-  }
-
-  // Dynamic Programming
-  if (patternLower.includes('dynamic') || patternLower.includes('dp') || subtopicLower.includes('dp')) {
-    return {
-      description: `Implement the dynamic programming solution for **${title}**.
-
-Identify the optimal substructure, formulate the recurrence relation, and optimize space using either memoization (top-down) or tabulation (bottom-up).`,
-      examples: [
-        { input: 'n = 5', output: '8', explanation: 'Optimal subproblem accumulation.' },
-        { input: 'n = 2', output: '2', explanation: 'Base case.' },
-        { input: 'n = 0', output: '0', explanation: 'Zero boundary condition.' },
-      ],
-      constraints: [
-        '0 <= n <= 10^4',
-        'Time Complexity: O(N) or O(N^2)',
-        'Space Complexity: O(N) or O(1)',
-      ],
-      starterCode: `def solve(n):
-    """
-    ${title}
-    Pattern: Dynamic Programming
-    Difficulty: ${q.difficulty}
-    """
-    # Write your optimal DP solution:
-    return n
-
-# Test execution:
-print("DP Result for 5:", solve(5))
-`,
-      testCases: [
-        { input: '(5)', expected: '5', explanation: 'DP state evaluation' },
-        { input: '(2)', expected: '2', explanation: 'Base case' },
-        { input: '(0)', expected: '0', explanation: 'Boundary case' },
-      ],
-      editorial: {
-        approach: 'Define DP state `dp[i]` as the optimal answer for subproblem size `i`. Transition from previous subproblems.',
-        complexity: 'Time: O(N) | Space: O(N) reducible to O(1)',
-      },
-    };
-  }
-
-  // General Algorithmic Fallback (High Quality, clean, LeetCode formatted)
   return {
-    description: `Given the input parameters, design and implement an optimal solution to solve **${title}**.
+    description: `### ${title}
 
-Your solution should strictly adhere to the asymptotic constraints of the **${q.pattern_name || 'Algorithmic'}** pattern and handle all boundary conditions.`,
-    examples: [
-      { input: 'Input: Sample verified test input for ' + title, output: 'Verified output result', explanation: 'Satisfies all problem invariant conditions.' },
-      { input: 'Input: Edge boundary input', output: 'Boundary result', explanation: 'Handles empty or extreme values gracefully.' },
-    ],
+**Source Platform:** ${q.platform || 'Curated Coding Sheet'}  
+**Difficulty Tier:** ${q.difficulty || 'Medium'}  
+${q.pattern_name ? `**Pattern / Topic:** ${q.pattern_name}` : ''}
+
+${hasExternalLink 
+  ? `This problem is sourced from [${q.platform || 'Official Judge'}](${q.practice_link}). Complete your practice using the official link or submit your implementation below.` 
+  : (q.hint_link ? `**Context & Notes:**\n${q.hint_link}` : `Practice this problem as part of your ${q.track_slug || 'learning'} curriculum.`)}
+
+> **Verification Status: ${hasExternalLink ? 'Partially Verified (External Judge Reference)' : 'Unverified (Awaiting Verified Test Suite)'}**  
+> Test cases for this problem are managed via the external judge platform. To maintain strict data integrity, Ap Workspace does not synthesize placeholder test inputs.`,
+    examples: [],
     constraints: [
-      `Algorithmic Pattern: ${q.pattern_name || 'General DSA'}`,
-      `Difficulty tier: ${q.difficulty}`,
-      'Time Complexity: O(N) or O(log N)',
-      'Auxiliary Space: O(1) to O(N)',
+      `Curriculum Track: ${q.track_slug || 'General DSA'}`,
+      `Difficulty tier: ${q.difficulty || 'Medium'}`,
+      hasExternalLink ? `External Judge: ${q.platform}` : 'Awaiting verified community test harness',
     ],
-    starterCode: `def solve(*args):
+    starterCode: `def solve():
     """
-    ${title}
-    Pattern: ${q.pattern_name || 'General DSA'}
+    Problem: ${title}
+    Source: ${q.platform || 'Coding Sheet'}
     Difficulty: ${q.difficulty}
-    Platform: ${q.platform || 'LeetCode'}
+    
+    Write your optimal solution below.
+    Use the official external judge link to submit against complete test suites.
     """
-    if not args:
-        return True
-    return args[0]
+    pass
 
-# Local test runner:
-print("Running solution for:", "${title}")
+# Execution / Verification:
+print("Executing solution for:", "${title}")
+solve()
 `,
-    testCases: [
-      { input: '([1, 2, 3])', expected: '[1, 2, 3]', explanation: 'Standard sample verification input' },
-      { input: '([10, 20])', expected: '[10, 20]', explanation: 'Two element evaluation' },
-      { input: '([])', expected: '[]', explanation: 'Empty boundary case' },
-    ],
+    testCases: [],
     editorial: {
-      approach: `Analyze the problem under the ${q.pattern_name || 'designated DSA'} framework and optimize state space.`,
-      complexity: 'Time: O(N) | Space: O(1) to O(N)',
+      approach: hasExternalLink
+        ? `Refer to official discussion and solutions on ${q.platform} at ${q.practice_link}.`
+        : 'Analyze problem constraints and develop optimal approach.',
+      complexity: 'Consult problem specifications on judge platform.',
     },
+    sourceAttribution: attribution,
+    sourceUrl: q.practice_link,
+    isApAuthored: false,
+    isCanonicalVerified: false,
+    verificationStatus: hasExternalLink ? 'partially_verified' : 'unverified',
   };
+}
+
+export function getStarterCode(q: Question, language: string = 'python', detail?: ProblemDetail): string {
+  const d = detail || getProblemDetails(q);
+  const lang = (language || 'python').toLowerCase();
+
+  if (lang === 'java') {
+    if (d.starterCodeJava) return d.starterCodeJava;
+    const key = (q.title || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (key.includes('even_or_odd') || (key.includes('even') && key.includes('odd'))) {
+      return `import java.util.*;\n\npublic class Solution {\n    public static String solve(int n) {\n        return (n % 2 == 0) ? "Even" : "Odd";\n    }\n\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextInt()) {\n            int n = sc.nextInt();\n            System.out.println(solve(n));\n        }\n    }\n}\n`;
+    }
+    return `import java.util.*;\n\npublic class Solution {\n    /**\n     * ${q.title}\n     * Difficulty: ${q.difficulty}\n     * Platform: ${q.platform || 'LeetCode'}\n     */\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if (sc.hasNextLine()) {\n            String line = sc.nextLine();\n            System.out.println(line);\n        }\n    }\n}\n`;
+  }
+
+  if (lang === 'cpp' || lang === 'c++') {
+    if (d.starterCodeCpp) return d.starterCodeCpp;
+    const key = (q.title || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (key.includes('even_or_odd') || (key.includes('even') && key.includes('odd'))) {
+      return `#include <iostream>\n#include <string>\n\nusing namespace std;\n\nstring solve(int n) {\n    return (n % 2 == 0) ? "Even" : "Odd";\n}\n\nint main() {\n    int n;\n    if (cin >> n) {\n        cout << solve(n) << endl;\n    }\n    return 0;\n}\n`;
+    }
+    return `#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\n/**\n * ${q.title}\n * Difficulty: ${q.difficulty}\n * Platform: ${q.platform || 'LeetCode'}\n */\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n\n    string line;\n    if (getline(cin, line)) {\n        cout << line << endl;\n    }\n    return 0;\n}\n`;
+  }
+
+  // Default Python
+  return d.starterCode;
 }

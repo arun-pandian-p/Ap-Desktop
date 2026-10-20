@@ -10,24 +10,24 @@ export interface LanguageOption {
   description?: string;
 }
 
-export const PYTHON_WORKSPACE_COLUMNS: LanguageOption[][] = [
-  // Column 1
+export const PRACTICE_WORKSPACE_COLUMNS: LanguageOption[][] = [
+  // Column 1 - Primary Practice Languages with Verified Execution
   [
-    { id: 'cpp', name: 'C++', monacoLang: 'cpp', isExecutable: false, badge: 'Syntax only' },
-    { id: 'java', name: 'Java', monacoLang: 'java', isExecutable: false, badge: 'Syntax only' },
     { id: 'python3', name: 'Python3', monacoLang: 'python', isExecutable: true, badge: 'Python 3.12' },
     { id: 'python', name: 'Python', monacoLang: 'python', isExecutable: true, badge: 'Python 3.12' },
+    { id: 'java', name: 'Java', monacoLang: 'java', isExecutable: true, badge: 'JDK 25 LTS' },
+    { id: 'cpp', name: 'C++', monacoLang: 'cpp', isExecutable: true, badge: 'C++17' },
+    { id: 'c', name: 'C', monacoLang: 'c', isExecutable: false, badge: 'Syntax only' },
+    { id: 'csharp', name: 'C#', monacoLang: 'csharp', isExecutable: false, badge: 'Syntax only' },
     { id: 'javascript', name: 'JavaScript', monacoLang: 'javascript', isExecutable: false, badge: 'Syntax only' },
     { id: 'typescript', name: 'TypeScript', monacoLang: 'typescript', isExecutable: false, badge: 'Syntax only' },
-    { id: 'csharp', name: 'C#', monacoLang: 'csharp', isExecutable: false, badge: 'Syntax only' },
-    { id: 'c', name: 'C', monacoLang: 'c', isExecutable: false, badge: 'Syntax only' },
   ],
   // Column 2
   [
     { id: 'go', name: 'Go', monacoLang: 'go', isExecutable: false, badge: 'Syntax only' },
     { id: 'kotlin', name: 'Kotlin', monacoLang: 'kotlin', isExecutable: false, badge: 'Syntax only' },
-    { id: 'swift', name: 'Swift', monacoLang: 'swift', isExecutable: false, badge: 'Syntax only' },
     { id: 'rust', name: 'Rust', monacoLang: 'rust', isExecutable: false, badge: 'Syntax only' },
+    { id: 'swift', name: 'Swift', monacoLang: 'swift', isExecutable: false, badge: 'Syntax only' },
     { id: 'ruby', name: 'Ruby', monacoLang: 'ruby', isExecutable: false, badge: 'Syntax only' },
     { id: 'php', name: 'PHP', monacoLang: 'php', isExecutable: false, badge: 'Syntax only' },
     { id: 'dart', name: 'Dart', monacoLang: 'dart', isExecutable: false, badge: 'Syntax only' },
@@ -40,6 +40,8 @@ export const PYTHON_WORKSPACE_COLUMNS: LanguageOption[][] = [
     { id: 'racket', name: 'Racket', monacoLang: 'scheme', isExecutable: false, badge: 'Syntax only' },
   ],
 ];
+
+export const PYTHON_WORKSPACE_COLUMNS = PRACTICE_WORKSPACE_COLUMNS;
 
 export const SQL_WORKSPACE_COLUMNS: LanguageOption[][] = [
   [
@@ -68,28 +70,53 @@ export const POSTGRES_WORKSPACE_COLUMNS: LanguageOption[][] = [
 ];
 
 export interface LanguageSelectorDropdownProps {
-  workspace: 'python' | 'sql' | 'postgres';
+  workspace?: 'python' | 'practice' | 'sql' | 'postgres';
   selectedLanguageId: string;
   onSelectLanguage: (lang: LanguageOption) => void;
   disabled?: boolean;
+  runtimeStatusMap?: Record<string, { installed: boolean; status?: string; version?: string }>;
 }
 
 export const LanguageSelectorDropdown: React.FC<LanguageSelectorDropdownProps> = ({
-  workspace,
+  workspace = 'practice',
   selectedLanguageId,
   onSelectLanguage,
   disabled = false,
+  runtimeStatusMap = {},
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [focusedCoords, setFocusedCoords] = useState<{ col: number; row: number }>({ col: 0, row: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const columns = workspace === 'python' 
-    ? PYTHON_WORKSPACE_COLUMNS 
-    : workspace === 'sql' 
+  const baseColumns = (workspace === 'sql') 
     ? SQL_WORKSPACE_COLUMNS 
-    : POSTGRES_WORKSPACE_COLUMNS;
+    : (workspace === 'postgres') 
+    ? POSTGRES_WORKSPACE_COLUMNS 
+    : PRACTICE_WORKSPACE_COLUMNS;
+
+  // Enrich columns with dynamic runtime statuses
+  const columns: LanguageOption[][] = baseColumns.map(col =>
+    col.map(item => {
+      const rt = runtimeStatusMap[item.id] || runtimeStatusMap[item.monacoLang];
+      if (rt) {
+        if (!rt.installed && (item.id === 'cpp' || item.id === 'java')) {
+          return {
+            ...item,
+            isExecutable: false,
+            badge: 'Not Installed',
+          };
+        } else if (rt.installed) {
+          return {
+            ...item,
+            isExecutable: true,
+            badge: rt.version || 'Ready',
+          };
+        }
+      }
+      return item;
+    })
+  );
 
   // Flatten options for lookup
   const allOptions = columns.flat();
@@ -213,7 +240,6 @@ export const LanguageSelectorDropdown: React.FC<LanguageSelectorDropdownProps> =
         break;
 
       default:
-        // Type-ahead jump: match first character
         if (e.key.length === 1 && /[a-zA-Z0-9#+]/.test(e.key)) {
           const searchChar = e.key.toLowerCase();
           for (let c = 0; c < columns.length; c++) {
@@ -260,6 +286,12 @@ export const LanguageSelectorDropdown: React.FC<LanguageSelectorDropdownProps> =
           </span>
         )}
 
+        {currentOption.isExecutable && (
+          <span className="text-[10px] px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 font-mono">
+            {currentOption.id === 'java' ? 'Java' : currentOption.id === 'cpp' ? 'C++' : 'Run'}
+          </span>
+        )}
+
         {isSingleOption ? (
           <Lock className="w-3 h-3 text-gray-500 ml-0.5" />
         ) : (
@@ -274,7 +306,7 @@ export const LanguageSelectorDropdown: React.FC<LanguageSelectorDropdownProps> =
           role="listbox"
           aria-label="Select Programming Language"
           className="absolute left-0 mt-1.5 z-50 bg-[#1E232E] border border-[#2F3746] rounded-xl shadow-2xl p-2.5 flex divide-x divide-[#2F3746] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
-          style={{ minWidth: workspace === 'python' ? '460px' : '260px' }}
+          style={{ minWidth: workspace === 'sql' || workspace === 'postgres' ? '260px' : '480px' }}
         >
           {columns.map((colItems, colIdx) => (
             <div key={colIdx} className="flex-1 px-1.5 space-y-0.5">
@@ -312,13 +344,13 @@ export const LanguageSelectorDropdown: React.FC<LanguageSelectorDropdownProps> =
 
                     {item.badge && !item.isExecutable && (
                       <span className="text-[9px] px-1 py-0.2 rounded bg-amber-950/80 text-amber-400/90 font-mono shrink-0 ml-1">
-                        Syntax only
+                        {item.badge}
                       </span>
                     )}
 
-                    {item.isExecutable && item.badge && workspace === 'python' && (
+                    {item.isExecutable && item.badge && (
                       <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 font-mono shrink-0 ml-1">
-                        Run
+                        {item.badge.includes('Ready') || item.badge.includes('LTS') ? item.badge : 'Run'}
                       </span>
                     )}
                   </button>

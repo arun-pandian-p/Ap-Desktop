@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard' as ScreenId, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tracks' as ScreenId, label: 'Learning Tracks', icon: Map },
     { id: 'problems' as ScreenId, label: 'Problems', icon: Code2 },
-    { id: 'python' as ScreenId, label: 'Python Practice', icon: Terminal },
+    { id: 'python' as ScreenId, label: 'Practice', icon: Terminal },
     { id: 'sql' as ScreenId, label: 'SQL Practice', icon: Database },
     { id: 'postgres' as ScreenId, label: 'PostgreSQL Lab', icon: Server },
     { id: 'planner' as ScreenId, label: 'To-do Planner', icon: CheckSquare },
@@ -108,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentScreen === item.id;
+            const isActive = currentScreen === item.id || (item.id === 'python' && (currentScreen as string) === 'practice');
             return (
               <button
                 key={item.id}

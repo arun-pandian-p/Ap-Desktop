@@ -9,14 +9,18 @@ export interface Track {
   title: string;
   artist: string;
   duration: number; // in seconds
-  playlist: 'tamil_instrumental' | 'calm_focus' | 'lofi_focus' | 'ambient' | 'imported';
+  playlist: 'tamil_instrumental' | 'calm_focus' | 'lofi_focus' | 'ambient' | 'imported' | 'lofi' | 'piano' | 'nature' | 'whitenoise' | 'custom';
+  category?: 'lofi' | 'ambient' | 'piano' | 'nature' | 'whitenoise' | 'custom';
   src: string;
   ragaNoteFreqs?: number[]; // Web Audio API procedural synthesis frequencies
   isCustom?: boolean;
+  filename?: string;
 }
 
+export type MusicCategory = 'lofi' | 'ambient' | 'piano' | 'nature' | 'whitenoise' | 'custom';
+
 export interface PlaylistInfo {
-  id: 'tamil_instrumental' | 'calm_focus' | 'lofi_focus' | 'ambient' | 'imported';
+  id: 'tamil_instrumental' | 'calm_focus' | 'lofi_focus' | 'ambient' | 'imported' | 'lofi' | 'piano' | 'nature' | 'whitenoise' | 'custom';
   name: string;
   description: string;
   iconName: string;
@@ -24,9 +28,9 @@ export interface PlaylistInfo {
 }
 
 export const CUSTOM_PLAYLIST: PlaylistInfo = {
-  id: 'imported',
-  name: 'My Audio',
-  description: 'Personal imported focus audio tracks (.mp3, .ogg, .wav)',
+  id: 'custom',
+  name: 'Custom',
+  description: 'Personal imported focus audio tracks (.mp3, .ogg, .wav, .m4a)',
   iconName: 'FolderMusic',
   color: '#EC4899'
 };
@@ -60,6 +64,15 @@ export const PLAYLISTS: PlaylistInfo[] = [
     iconName: 'Wind',
     color: '#10B981'
   }
+];
+
+export const MUSIC_CATEGORIES: { id: MusicCategory; name: string; description: string; icon: string }[] = [
+  { id: 'lofi', name: 'Lo-fi', description: 'Chill midnight lo-fi study beats', icon: 'Headphones' },
+  { id: 'ambient', name: 'Ambient', description: 'Veena harmonics and temple chimes', icon: 'Sparkles' },
+  { id: 'piano', name: 'Piano', description: 'Acoustic piano and gentle melodies', icon: 'Music' },
+  { id: 'nature', name: 'Nature Sounds', description: 'Forest rain, stream, and birds', icon: 'Wind' },
+  { id: 'whitenoise', name: 'White Noise', description: 'Deep brown and pink noise', icon: 'Radio' },
+  { id: 'custom', name: 'Custom', description: 'Locally imported focus audio tracks', icon: 'Music' },
 ];
 
 export const TRACK_CATALOG: Track[] = [
@@ -150,6 +163,72 @@ export const TRACK_CATALOG: Track[] = [
     playlist: 'ambient',
     src: '/audio/study/ambient/mountain_wind.mp3',
     ragaNoteFreqs: [98.00, 146.83, 196.00, 293.66]
+  },
+
+  // 5. Piano
+  {
+    id: 'piano-1',
+    title: 'Moonlight Sonata Focus (Adagio)',
+    artist: 'Classical Piano Lab',
+    duration: 330,
+    playlist: 'piano',
+    category: 'piano',
+    src: '/audio/study/piano/moonlight_sonata.mp3',
+    ragaNoteFreqs: [220.00, 261.63, 329.63, 440.00]
+  },
+  {
+    id: 'piano-2',
+    title: 'Soft Nocturne Reverie',
+    artist: 'Quiet Keys Project',
+    duration: 290,
+    playlist: 'piano',
+    category: 'piano',
+    src: '/audio/study/piano/soft_nocturne.mp3',
+    ragaNoteFreqs: [174.61, 220.00, 261.63, 349.23]
+  },
+
+  // 6. Nature Sounds
+  {
+    id: 'nature-1',
+    title: 'Gentle Rain on Cedar Leaves',
+    artist: 'Rainforest Acoustics',
+    duration: 420,
+    playlist: 'nature',
+    category: 'nature',
+    src: '/audio/study/nature/cedar_rain.mp3',
+    ragaNoteFreqs: [130.81, 164.81, 196.00, 261.63]
+  },
+  {
+    id: 'nature-2',
+    title: 'Forest Stream & Birds at Dawn',
+    artist: 'Wilderness Ambience',
+    duration: 360,
+    playlist: 'nature',
+    category: 'nature',
+    src: '/audio/study/nature/forest_stream.mp3',
+    ragaNoteFreqs: [146.83, 196.00, 220.00, 293.66]
+  },
+
+  // 7. White Noise
+  {
+    id: 'whitenoise-1',
+    title: 'Deep Brown Noise (Deep Work)',
+    artist: 'Neural Wave Acoustics',
+    duration: 450,
+    playlist: 'whitenoise',
+    category: 'whitenoise',
+    src: '/audio/study/whitenoise/brown_noise.mp3',
+    ragaNoteFreqs: [82.41, 110.00, 146.83, 196.00]
+  },
+  {
+    id: 'whitenoise-2',
+    title: 'Pink Noise Gentle Stream',
+    artist: 'Focus Frequency Lab',
+    duration: 400,
+    playlist: 'whitenoise',
+    category: 'whitenoise',
+    src: '/audio/study/whitenoise/pink_noise.mp3',
+    ragaNoteFreqs: [98.00, 130.81, 164.81, 246.94]
   }
 ];
 
@@ -178,6 +257,62 @@ class StudyMusicService {
   constructor() {
     this.loadPersistedSettings();
     this.loadCustomTracks();
+    this.loadElectronManagedAudio();
+    this.initAudioElement();
+  }
+
+  private initAudioElement() {
+    if (typeof Audio === 'undefined') return;
+    if (this.audioEl) return;
+    try {
+      this.audioEl = new Audio();
+      this.audioEl.addEventListener('timeupdate', () => {
+        if (this.audioEl && !this.isUsingSynthFallback) {
+          this.currentTime = Math.floor(this.audioEl.currentTime);
+          this.notify();
+        }
+      });
+      this.audioEl.addEventListener('ended', () => {
+        this.handleTrackEnded();
+      });
+      this.audioEl.addEventListener('error', () => {
+        if (this.isPlaying) {
+          this.startSynthFallback(this.getCurrentTrack(), false);
+        }
+      });
+    } catch (e) {
+      console.warn('Audio element initialization failed:', e);
+    }
+  }
+
+  public async loadElectronManagedAudio() {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.listManagedAudio) {
+      try {
+        const res = await (window as any).electronAPI.listManagedAudio();
+        if (res && res.success && Array.isArray(res.files)) {
+          const electronTracks: Track[] = res.files.map((f: any) => ({
+            id: `managed-${f.id}`,
+            title: f.title || f.filename,
+            artist: 'Imported Focus Audio',
+            duration: f.duration || 180,
+            playlist: 'custom',
+            category: 'custom',
+            src: `file:///${f.filepath.replace(/\\/g, '/')}`,
+            isCustom: true,
+            filename: f.filename,
+          }));
+          const existingIds = new Set(this.customTracks.map(t => t.id));
+          const newTracks = electronTracks.filter(t => !existingIds.has(t.id));
+          if (newTracks.length > 0) {
+            this.customTracks = [...this.customTracks, ...newTracks];
+            this.saveCustomTracks();
+            this.notify();
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load electron managed audio:', e);
+      }
+    }
   }
 
   private loadPersistedSettings() {
@@ -333,9 +468,23 @@ class StudyMusicService {
     });
   }
 
+  public async deleteManagedTrack(trackId: string, filename?: string) {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.deleteManagedAudio && filename) {
+      try {
+        await (window as any).electronAPI.deleteManagedAudio(filename);
+      } catch (e) {
+        console.warn('Failed to delete managed audio from disk:', e);
+      }
+    }
+    this.deleteCustomTrack(trackId);
+  }
+
   public getPlaylistTracks(playlistId: PlaylistInfo['id'] = this.currentPlaylistId): Track[] {
-    if (playlistId === 'imported') {
+    if (playlistId === 'imported' || playlistId === 'custom') {
       return this.customTracks;
+    }
+    if (playlistId === 'lofi') {
+      return TRACK_CATALOG.filter(t => t.playlist === 'lofi' || t.playlist === 'lofi_focus');
     }
     return TRACK_CATALOG.filter(t => t.playlist === playlistId);
   }
@@ -383,13 +532,40 @@ class StudyMusicService {
 
   public async play() {
     if (this.isPlaying) return;
+
+    // If resuming current track where we paused
+    if (this.currentTime > 0) {
+      if (!this.isUsingSynthFallback && this.audioEl && this.audioEl.src) {
+        try {
+          this.isPlaying = true;
+          this.audioEl.volume = this.isMuted ? 0 : this.volume;
+          await this.audioEl.play();
+          this.notify();
+          return;
+        } catch {
+          // If HTMLAudio cannot resume, fallback to synth without zeroing time
+          this.startSynthFallback(this.getCurrentTrack(), false);
+          return;
+        }
+      } else if (this.isUsingSynthFallback) {
+        this.isPlaying = true;
+        this.resumeSynthFallback(this.getCurrentTrack());
+        return;
+      }
+    }
+
     this.isPlaying = true;
     await this.playCurrentTrack();
   }
 
   public pause() {
     this.isPlaying = false;
-    this.stopAudio();
+    if (this.audioEl && !this.isUsingSynthFallback) {
+      try {
+        this.audioEl.pause();
+      } catch {}
+    }
+    this.pauseSynth();
     this.notify();
   }
 
@@ -414,6 +590,7 @@ class StudyMusicService {
     if (this.isPlaying) {
       this.playCurrentTrack();
     } else {
+      this.currentTime = 0;
       this.notify();
     }
   }
@@ -427,6 +604,7 @@ class StudyMusicService {
     if (this.isPlaying) {
       this.playCurrentTrack();
     } else {
+      this.currentTime = 0;
       this.notify();
     }
   }
@@ -480,6 +658,7 @@ class StudyMusicService {
       } catch {}
     }
     this.stopSynth();
+    this.currentTime = 0;
   }
 
   private async playCurrentTrack() {
@@ -487,38 +666,26 @@ class StudyMusicService {
     const track = this.getCurrentTrack();
     this.duration = track.duration;
     this.currentTime = 0;
+    this.isPlaying = true;
 
     // 1. Attempt to play real audio file if present
     try {
-      if (!this.audioEl) {
-        this.audioEl = new Audio();
-        this.audioEl.addEventListener('timeupdate', () => {
-          if (this.audioEl && !this.isUsingSynthFallback) {
-            this.currentTime = this.audioEl.currentTime;
-            this.notify();
-          }
-        });
-        this.audioEl.addEventListener('ended', () => {
-          this.handleTrackEnded();
-        });
-        this.audioEl.addEventListener('error', () => {
-          // File missing on disk -> Seamlessly fallback to procedural Web Audio raga
-          this.startSynthFallback(track);
-        });
-      }
+      this.initAudioElement();
 
-      this.audioEl.src = track.src;
-      this.audioEl.volume = this.isMuted ? 0 : this.volume;
-      const playPromise = this.audioEl.play();
-      if (playPromise !== undefined) {
-        await playPromise;
-        this.isUsingSynthFallback = false;
-        this.notify();
-        return;
+      if (this.audioEl) {
+        this.audioEl.src = track.src;
+        this.audioEl.volume = this.isMuted ? 0 : this.volume;
+        const playPromise = this.audioEl.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          this.isUsingSynthFallback = false;
+          this.notify();
+          return;
+        }
       }
     } catch {
       // Audio play blocked or file not found -> start synth
-      this.startSynthFallback(track);
+      this.startSynthFallback(track, true);
     }
   }
 
@@ -540,9 +707,50 @@ class StudyMusicService {
   // -------------------------------------------------------------
   // Web Audio API Ambient Procedural Raga Engine (100% Offline)
   // -------------------------------------------------------------
-  private startSynthFallback(track: Track) {
+  private pauseSynth() {
+    if (this.synthInterval) {
+      clearInterval(this.synthInterval);
+      this.synthInterval = null;
+    }
+    if (this.audioCtx && this.audioCtx.state === 'running') {
+      try {
+        this.audioCtx.suspend();
+      } catch {}
+    }
+  }
+
+  private resumeSynthFallback(track: Track) {
+    if (!this.synthNodes || !this.audioCtx) {
+      this.startSynthFallback(track, false);
+      return;
+    }
+
+    try {
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+    } catch {}
+
+    if (!this.synthInterval) {
+      this.synthInterval = setInterval(() => {
+        if (this.isPlaying && this.isUsingSynthFallback) {
+          this.currentTime += 1;
+          if (this.currentTime >= this.duration) {
+            this.handleTrackEnded();
+          }
+          this.notify();
+        }
+      }, 1000);
+    }
+    this.notify();
+  }
+
+  private startSynthFallback(track: Track, resetTime = true) {
     this.stopSynth();
     this.isUsingSynthFallback = true;
+    if (resetTime) {
+      this.currentTime = 0;
+    }
 
     try {
       const AudioContextClass = typeof window !== 'undefined' ? (window.AudioContext || (window as any).webkitAudioContext) : null;
