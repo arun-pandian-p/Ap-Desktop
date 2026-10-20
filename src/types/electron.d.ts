@@ -122,6 +122,20 @@ export interface ElectronAPI {
   writeBackupFile?: (filePath: string, content: string) => Promise<{ success: boolean; filePath?: string; size?: number; error?: string }>;
   openImportFileDialog?: (options?: { fileType?: 'json' | 'csv' | 'all' }) => Promise<{ canceled: boolean; filePaths: string[] }>;
   readImportFile?: (filePath: string) => Promise<{ success: boolean; content?: string; size?: number; fileName?: string; error?: string }>;
+
+  // Java Spring Boot Sidecar Backend
+  backendGetStatus?: () => Promise<{
+    status: 'stopped' | 'starting' | 'running' | 'offline_fallback' | 'missing_java';
+    isRunning: boolean;
+    port: number;
+    url: string | null;
+    wsUrl: string | null;
+    isOfflineFallback: boolean;
+    hasJava: boolean;
+    hasJar: boolean;
+  }>;
+  backendRestart?: () => Promise<any>;
+  backendRequest?: (path: string, options?: { method?: string; headers?: Record<string, string>; body?: any; timeout?: number }) => Promise<{ status: number; data: any }>;
 }
 
 declare global {

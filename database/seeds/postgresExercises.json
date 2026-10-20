@@ -1,0 +1,46 @@
+[
+  {
+    "id": "pg-1",
+    "title": "PostgreSQL 16 Diagnostic & Catalog Inspection",
+    "difficulty": "Easy",
+    "category": "System Catalogs",
+    "description": "Inspect PostgreSQL 16 server metadata, database name, connected user, and uptime parameters from pg_stat_database.",
+    "setup_sql": "-- Diagnostic metadata inspection\nSELECT version(), current_database(), current_user;",
+    "query_solution": "SELECT datname, numbackends, xact_commit, xact_rollback, blks_read, blks_hit FROM pg_stat_database WHERE datname = current_database();",
+    "verification_sql": "SELECT count(*) FROM pg_stat_database WHERE datname = current_database();",
+    "notes": "Queries pg_stat_database on live PostgreSQL 16 server."
+  },
+  {
+    "id": "pg-2",
+    "title": "Employee Department Ranking (DENSE_RANK)",
+    "difficulty": "Medium",
+    "category": "Window Functions",
+    "description": "Compute the salary ranking of each employee inside their department using DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC).",
+    "setup_sql": "CREATE TABLE IF NOT EXISTS lab_employees (\n  id SERIAL PRIMARY KEY,\n  name VARCHAR(100),\n  department VARCHAR(50),\n  salary NUMERIC(10, 2)\n);\nINSERT INTO lab_employees (name, department, salary) VALUES\n  ('Alice Johnson', 'Engineering', 95000),\n  ('Bob Smith', 'Engineering', 88000),\n  ('Charlie Brown', 'Engineering', 95000),\n  ('Diana Prince', 'Marketing', 78000),\n  ('Evan Wright', 'Marketing', 69000)\nON CONFLICT DO NOTHING;",
+    "query_solution": "SELECT name, department, salary, DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as dept_rank FROM lab_employees ORDER BY department, dept_rank;",
+    "verification_sql": "SELECT count(*) FROM lab_employees;",
+    "notes": "Demonstrates window partitioning in genuine PostgreSQL."
+  },
+  {
+    "id": "pg-3",
+    "title": "Recursive CTE: Organizational Hierarchy",
+    "difficulty": "Hard",
+    "category": "Recursive CTE",
+    "description": "Traverse the company management tree using WITH RECURSIVE to compute each employee's depth level from the CEO.",
+    "setup_sql": "CREATE TABLE IF NOT EXISTS org_hierarchy (\n  emp_id INT PRIMARY KEY,\n  name VARCHAR(100),\n  manager_id INT REFERENCES org_hierarchy(emp_id)\n);\nINSERT INTO org_hierarchy (emp_id, name, manager_id) VALUES\n  (1, 'CEO Arun', NULL),\n  (2, 'VP Tech Sarah', 1),\n  (3, 'VP Product David', 1),\n  (4, 'Staff Eng Elena', 2),\n  (5, 'Senior Eng Carlos', 4)\nON CONFLICT DO NOTHING;",
+    "query_solution": "WITH RECURSIVE OrgChart AS (\n  SELECT emp_id, name, manager_id, 1 as level\n  FROM org_hierarchy\n  WHERE manager_id IS NULL\n  UNION ALL\n  SELECT e.emp_id, e.name, e.manager_id, o.level + 1\n  FROM org_hierarchy e\n  JOIN OrgChart o ON e.manager_id = o.emp_id\n)\nSELECT emp_id, name, level FROM OrgChart ORDER BY level, emp_id;",
+    "verification_sql": "SELECT count(*) FROM org_hierarchy;",
+    "notes": "PostgreSQL genuine recursive query execution."
+  },
+  {
+    "id": "pg-4",
+    "title": "JSONB Indexing & Querying in PostgreSQL",
+    "difficulty": "Medium",
+    "category": "JSONB Operations",
+    "description": "Store and filter arbitrary payload data using PostgreSQL JSONB containment operator @>.",
+    "setup_sql": "CREATE TABLE IF NOT EXISTS customer_events (\n  event_id SERIAL PRIMARY KEY,\n  payload JSONB NOT NULL\n);\nINSERT INTO customer_events (payload) VALUES\n  ('{\"event\": \"click\", \"user_id\": 101, \"device\": \"desktop\", \"features\": [\"dark_mode\"]}'::jsonb),\n  ('{\"event\": \"signup\", \"user_id\": 102, \"device\": \"mobile\"}'::jsonb),\n  ('{\"event\": \"checkout\", \"user_id\": 101, \"device\": \"desktop\", \"amount\": 149.99}'::jsonb)\nON CONFLICT DO NOTHING;",
+    "query_solution": "SELECT event_id, payload->>'event' as event_name, payload->>'user_id' as user_id FROM customer_events WHERE payload @> '{\"device\": \"desktop\"}'::jsonb;",
+    "verification_sql": "SELECT count(*) FROM customer_events;",
+    "notes": "Native JSONB indexing and query capability in PostgreSQL."
+  }
+]

@@ -174,7 +174,9 @@ describe('Ap Workspace Update Engine Tests', () => {
   });
 
   describe('5. Inno Setup Configuration Consistency', () => {
-    const issPath = path.resolve(__dirname, '../installer/ap_installer.iss');
+    const issPath = fs.existsSync(path.resolve(__dirname, '../installer/windows/installer.iss'))
+      ? path.resolve(__dirname, '../installer/windows/installer.iss')
+      : path.resolve(__dirname, '../installer/ap_installer.iss');
     const pkgPath = path.resolve(__dirname, '../package.json');
 
     it('should have consistent version across package.json and ap_installer.iss', () => {

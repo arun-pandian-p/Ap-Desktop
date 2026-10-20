@@ -25,6 +25,7 @@ const {
   downloadUpdate,
   launchInstallerAndRestart,
 } = require('./updateManager.cjs');
+const backendManager = require('./backendManager.cjs');
 
 // Lifecycle stage tracking for diagnostics
 let appLifecycleStage = 'initialization';
@@ -290,7 +291,7 @@ function getAppVersionSafe() {
       if (pkg.version) return pkg.version;
     }
   } catch {}
-  return '1.2.0';
+  return '1.3.0';
 }
 
 // App & Python info
@@ -820,6 +821,27 @@ ipcMain.handle('import:read-file', async (_event, { filePath } = {}) => {
 });
 
 // -------------------------------------------------------------
+// Java Spring Boot Sidecar IPC Handlers
+// -------------------------------------------------------------
+
+ipcMain.handle('backend:get-status', () => {
+  return backendManager.getStatus();
+});
+
+ipcMain.handle('backend:restart', async () => {
+  backendManager.stopBackend();
+  return await backendManager.startBackend();
+});
+
+ipcMain.handle('backend:request', async (_event, { path: reqPath, options } = {}) => {
+  try {
+    return await backendManager.request(reqPath, options);
+  } catch (err) {
+    return { status: 500, error: err.message };
+  }
+});
+
+// -------------------------------------------------------------
 // App Lifecycle
 // -------------------------------------------------------------
 
@@ -832,6 +854,11 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('Failed to start WebSocket server:', err);
   }
+
+  // Start managed Java Spring Boot sidecar (non-blocking with offline fallback)
+  backendManager.startBackend().catch((err) => {
+    console.warn('[Main] Backend sidecar startup non-fatal notice:', err.message);
+  });
 
   // Set Permissive Desktop CSP for local assets, fonts, icons, images, and workers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -868,6 +895,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   setStage('shutdown');
   stopWebSocketServer();
+  backendManager.stopBackend();
 });
 
 app.on('window-all-closed', () => {

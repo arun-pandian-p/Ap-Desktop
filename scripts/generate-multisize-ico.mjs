@@ -7,7 +7,9 @@ const sizes = [16, 24, 32, 48, 64, 128, 256];
 const tempDir = 'scratch/ico_temp';
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-const srcImgPath = path.resolve('screens/Glossy Red Ap Monogram Icon.png');
+const srcImgPath = fs.existsSync(path.resolve('assets/branding/Glossy Red Ap Monogram Icon.png'))
+  ? path.resolve('assets/branding/Glossy Red Ap Monogram Icon.png')
+  : path.resolve('build/icon.png');
 
 for (const s of sizes) {
   const outPng = path.resolve(tempDir, `icon_${s}.png`);

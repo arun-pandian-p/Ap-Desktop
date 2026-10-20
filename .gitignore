@@ -10,6 +10,10 @@ release/
 out/
 build/certs/
 scratch/
+backend/target/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 
 # Certificates & Private Keys
 *.pfx

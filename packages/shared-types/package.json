@@ -1,0 +1,8 @@
+{
+  "name": "@ap/shared-types",
+  "version": "1.3.0",
+  "description": "Shared TypeScript types across Ap Desktop, Web, and Backend interfaces",
+  "main": "index.ts",
+  "types": "index.ts",
+  "private": true
+}

@@ -80,4 +80,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeBackupFile: (filePath, content) => ipcRenderer.invoke('backup:write-file', { filePath, content }),
   openImportFileDialog: (options) => ipcRenderer.invoke('import:open-file-dialog', options),
   readImportFile: (filePath) => ipcRenderer.invoke('import:read-file', { filePath }),
+
+  // Java Spring Boot Sidecar Backend
+  backendGetStatus: () => ipcRenderer.invoke('backend:get-status'),
+  backendRestart: () => ipcRenderer.invoke('backend:restart'),
+  backendRequest: (path, options) => ipcRenderer.invoke('backend:request', { path, options }),
 });

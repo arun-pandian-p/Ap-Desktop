@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque
 
 def main():
-    src_path = 'screens/Glossy Red Ap Monogram Icon.png'
+    src_path = 'assets/branding/Glossy Red Ap Monogram Icon.png' if os.path.exists('assets/branding/Glossy Red Ap Monogram Icon.png') else 'build/icon.png'
     if not os.path.exists(src_path):
         print(f"File not found: {src_path}")
         return

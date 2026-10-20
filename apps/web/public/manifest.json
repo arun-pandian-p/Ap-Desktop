@@ -1,0 +1,15 @@
+{
+  "short_name": "Ap",
+  "name": "Ap - Coding Practice & Learning Platform",
+  "icons": [
+    {
+      "src": "/icons/icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#09090b",
+  "theme_color": "#dc2626",
+  "display": "standalone"
+}
